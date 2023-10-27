@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wwarn #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -19,28 +18,26 @@ module Haddock.Interface.LexParseRn
   , processDocStringFromString
   , processDocStringParas
   , processDocStrings
-  , processModuleHeader
   ) where
 
 import Control.Arrow
 import Control.Monad
-import Data.Functor
-import Data.List ((\\), maximumBy)
-import Data.Ord
-import Documentation.Haddock.Doc (metaDocConcat)
-import GHC.Driver.Session (languageExtensions)
-import qualified GHC.LanguageExtensions as LangExt
-import GHC
-import Haddock.Interface.ParseModuleHeader
-import Haddock.Parser
-import Haddock.Types
-import GHC.Types.Name
-import GHC.Types.Avail ( availName )
-import GHC.Parser.PostProcess
-import GHC.Driver.Ppr ( showPpr, showSDoc )
-import GHC.Types.Name.Reader
-import GHC.Data.EnumSet as EnumSet
 import Data.Foldable (traverse_)
+import Data.Functor
+import Data.List (maximumBy)
+import Data.Ord
+import Data.String
+
+import GHC
+import GHC.Driver.Ppr ( showPpr, showSDoc )
+import GHC.Parser.PostProcess
+import GHC.Types.Avail ( availName )
+import GHC.Types.Name
+import GHC.Types.Name.Reader
+
+import Haddock.Doc (metaDocConcat)
+import Haddock.Parser as P
+import Haddock.Types
 
 processDocStrings :: DynFlags -> Maybe Package -> GlobalRdrEnv -> [HsDocString]
                   -> ErrMsgM (Maybe (MDoc Name))
@@ -54,42 +51,16 @@ processDocStrings dflags pkg gre strs = do
     x -> pure (Just x)
 
 processDocStringParas :: DynFlags -> Maybe Package -> GlobalRdrEnv -> HsDocString -> ErrMsgM (MDoc Name)
-processDocStringParas dflags pkg gre hds =
-  overDocF (rename dflags gre) $ parseParas dflags pkg (renderHsDocString hds)
+processDocStringParas dflags pkg gre =
+  overDocF (rename dflags gre) . P.parseParas dflags pkg . renderHsDocString
 
 processDocString :: DynFlags -> GlobalRdrEnv -> HsDocString -> ErrMsgM (Doc Name)
-processDocString dflags gre hds =
-  processDocStringFromString dflags gre (renderHsDocString hds)
+processDocString dflags gre =
+  processDocStringFromString dflags gre . renderHsDocString
 
 processDocStringFromString :: DynFlags -> GlobalRdrEnv -> String -> ErrMsgM (Doc Name)
-processDocStringFromString dflags gre hds =
-  rename dflags gre $ parseString dflags hds
-
-processModuleHeader :: DynFlags -> Maybe Package -> GlobalRdrEnv -> SafeHaskellMode -> Maybe HsDocString
-                    -> ErrMsgM (HaddockModInfo Name, Maybe (MDoc Name))
-processModuleHeader dflags pkgName gre safety mayStr = do
-  (hmi, doc) <-
-    case mayStr of
-      Nothing -> return failure
-      Just hds -> do
-        let str = renderHsDocString hds
-            (hmi, doc) = parseModuleHeader dflags pkgName str
-        !descr <- case hmi_description hmi of
-                    Just hmi_descr -> Just <$> rename dflags gre hmi_descr
-                    Nothing        -> pure Nothing
-        let hmi' = hmi { hmi_description = descr }
-        doc'  <- overDocF (rename dflags gre) doc
-        return (hmi', Just doc')
-
-  let flags :: [LangExt.Extension]
-      -- We remove the flags implied by the language setting and we display the language instead
-      flags = EnumSet.toList (extensionFlags dflags) \\ languageExtensions (language dflags)
-  return (hmi { hmi_safety = Just $ showPpr dflags safety
-              , hmi_language = language dflags
-              , hmi_extensions = flags
-              } , doc)
-  where
-    failure = (emptyHaddockModInfo, Nothing)
+processDocStringFromString dflags gre =
+  rename dflags gre . P.parseString dflags
 
 traverseSnd :: (Traversable t, Applicative f) => (a -> f b) -> t (x, a) -> f (t (x, b))
 traverseSnd f = traverse (\(x, a) ->

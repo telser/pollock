@@ -1,0 +1,3 @@
+roots = [ "Haddock.Interface.Coverage.*" ]
+type-class-roots = false
+unused-types = true

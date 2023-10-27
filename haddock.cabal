@@ -60,97 +60,97 @@ flag in-ghc-tree
   default: False
   manual: True
 
-executable haddock
-  default-language:     Haskell2010
-  main-is:              Main.hs
-  hs-source-dirs:       driver
-  ghc-options:          -funbox-strict-fields -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -O2 -threaded
+-- executable haddock
+--   default-language:     Haskell2010
+--   main-is:              Main.hs
+--   hs-source-dirs:       driver
+--   ghc-options:          -funbox-strict-fields -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -O2 -threaded
 
-  -- haddock typically only supports a single GHC major version
-  build-depends:
-    base ^>= 4.13.0.0 || ^>= 4.14.0.0 || ^>= 4.15.0.0 || ^>= 4.16.0.0 || ^>= 4.17.0.0
+--   -- haddock typically only supports a single GHC major version
+--   build-depends:
+--     base ^>= 4.13.0.0 || ^>= 4.14.0.0 || ^>= 4.15.0.0 || ^>= 4.16.0.0 || ^>= 4.17.0.0
 
-  if flag(in-ghc-tree)
-    hs-source-dirs: haddock-api/src,  haddock-library/src
-    cpp-options: -DIN_GHC_TREE
-    build-depends:
-      filepath,
-      directory,
-      containers,
-      deepseq,
-      exceptions,
-      array,
-      xhtml >= 3000.2 && < 3000.3,
-      ghc-boot,
-      ghc-boot-th,
-      ghc == 9.4.*,
-      bytestring,
-      parsec,
-      text,
-      transformers,
-      mtl
+--   if flag(in-ghc-tree)
+--     hs-source-dirs: haddock-api/src,  haddock-library/src
+--     cpp-options: -DIN_GHC_TREE
+--     build-depends:
+--       filepath,
+--       directory,
+--       containers,
+--       deepseq,
+--       exceptions,
+--       array,
+--       xhtml >= 3000.2 && < 3000.3,
+--       ghc-boot,
+--       ghc-boot-th,
+--       ghc == 9.4.*,
+--       bytestring,
+--       parsec,
+--       text,
+--       transformers,
+--       mtl
 
-    other-modules:
-      CompatPrelude
-      Documentation.Haddock.Parser
-      Documentation.Haddock.Parser.Monad
-      Documentation.Haddock.Parser.Identifier
-      Documentation.Haddock.Types
-      Documentation.Haddock.Doc
-      Documentation.Haddock.Parser.Util
-      Documentation.Haddock.Markup
+--     other-modules:
+--       CompatPrelude
+--       Documentation.Haddock.Parser
+--       Documentation.Haddock.Parser.Monad
+--       Documentation.Haddock.Parser.Identifier
+--       Documentation.Haddock.Types
+--       Documentation.Haddock.Doc
+--       Documentation.Haddock.Parser.Util
+--       Documentation.Haddock.Markup
 
-      Documentation.Haddock
-      Haddock
-      Haddock.Interface
-      Haddock.Interface.Json
-      Haddock.Interface.Rename
-      Haddock.Interface.Create
-      Haddock.Interface.AttachInstances
-      Haddock.Interface.LexParseRn
-      Haddock.Interface.ParseModuleHeader
-      Haddock.Interface.Specialize
-      Haddock.Parser
-      Haddock.Utils
-      Haddock.Utils.Json
-      Haddock.Utils.Json.Parser
-      Haddock.Utils.Json.Types
-      Haddock.Backends.Xhtml
-      Haddock.Backends.Xhtml.Decl
-      Haddock.Backends.Xhtml.DocMarkup
-      Haddock.Backends.Xhtml.Layout
-      Haddock.Backends.Xhtml.Meta
-      Haddock.Backends.Xhtml.Names
-      Haddock.Backends.Xhtml.Themes
-      Haddock.Backends.Xhtml.Types
-      Haddock.Backends.Xhtml.Utils
-      Haddock.Backends.LaTeX
-      Haddock.Backends.HaddockDB
-      Haddock.Backends.Hoogle
-      Haddock.Backends.Hyperlinker
-      Haddock.Backends.Hyperlinker.Parser
-      Haddock.Backends.Hyperlinker.Renderer
-      Haddock.Backends.Hyperlinker.Types
-      Haddock.Backends.Hyperlinker.Utils
-      Haddock.ModuleTree
-      Haddock.Types
-      Haddock.Doc
-      Haddock.Version
-      Haddock.InterfaceFile
-      Haddock.Options
-      Haddock.GhcUtils
-      Haddock.Syb
-      Haddock.Convert
+--       Documentation.Haddock
+--       Haddock
+--       Haddock.Interface
+--       Haddock.Interface.Json
+--       Haddock.Interface.Rename
+--       Haddock.Interface.Create
+--       Haddock.Interface.AttachInstances
+--       Haddock.Interface.LexParseRn
+--       Haddock.Interface.ParseModuleHeader
+--       Haddock.Interface.Specialize
+--       Haddock.Parser
+--       Haddock.Utils
+--       Haddock.Utils.Json
+--       Haddock.Utils.Json.Parser
+--       Haddock.Utils.Json.Types
+--       Haddock.Backends.Xhtml
+--       Haddock.Backends.Xhtml.Decl
+--       Haddock.Backends.Xhtml.DocMarkup
+--       Haddock.Backends.Xhtml.Layout
+--       Haddock.Backends.Xhtml.Meta
+--       Haddock.Backends.Xhtml.Names
+--       Haddock.Backends.Xhtml.Themes
+--       Haddock.Backends.Xhtml.Types
+--       Haddock.Backends.Xhtml.Utils
+--       Haddock.Backends.LaTeX
+--       Haddock.Backends.HaddockDB
+--       Haddock.Backends.Hoogle
+--       Haddock.Backends.Hyperlinker
+--       Haddock.Backends.Hyperlinker.Parser
+--       Haddock.Backends.Hyperlinker.Renderer
+--       Haddock.Backends.Hyperlinker.Types
+--       Haddock.Backends.Hyperlinker.Utils
+--       Haddock.ModuleTree
+--       Haddock.Types
+--       Haddock.Doc
+--       Haddock.Version
+--       Haddock.InterfaceFile
+--       Haddock.Options
+--       Haddock.GhcUtils
+--       Haddock.Syb
+--       Haddock.Convert
 
-      Paths_haddock
+--       Paths_haddock
 
-    autogen-modules:
-      Paths_haddock
+--     autogen-modules:
+--       Paths_haddock
 
-  else
-    -- in order for haddock's advertised version number to have proper meaning,
-    -- we pin down to a single haddock-api version.
-    build-depends:  haddock-api == 2.27.1
+--   else
+--     -- in order for haddock's advertised version number to have proper meaning,
+--     -- we pin down to a single haddock-api version.
+--     build-depends:  haddock-api == 2.27.1
 
 test-suite html-test
   type:             exitcode-stdio-1.0

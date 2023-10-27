@@ -1,5 +1,4 @@
-{-# LANGUAGE CPP, DeriveDataTypeable, DeriveTraversable, StandaloneDeriving, TypeFamilies, RecordWildCards #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, DeriveTraversable, TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PartialTypeSignatures #-}
@@ -25,268 +24,108 @@
 -- Types that are commonly used through-out Haddock. Some of the most
 -- important types are defined here, like 'Interface' and 'DocName'.
 -----------------------------------------------------------------------------
-module Haddock.Types (
-  module Haddock.Types
-  , HsDocString, LHsDocString
-  , Fixity(..)
-  , module Documentation.Haddock.Types
+module Haddock.Types where
 
-  -- $ Reexports
-  , runWriter
-  , tell
-  , fromString
- ) where
-
+import Control.Monad.Reader (ReaderT(..))
+import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Writer.CPS (Writer, WriterT, runWriter)
+import qualified Control.Monad.Trans.Writer.CPS as CPS
+import Control.Monad.Writer.Class (MonadWriter(..))
+import Data.ByteString.Builder
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.List  as List
+import Data.Map (Map)
+import Data.String
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Data.String
-import Control.DeepSeq
-import Control.Exception (throw)
-import Control.Monad.Catch
-import Control.Monad.IO.Class (MonadIO(..))
-import qualified Control.Monad.Trans.Writer.CPS as CPS
-import Control.Monad.Trans.Writer.CPS (Writer, WriterT, runWriter, runWriterT)
-import Control.Monad.Writer.Class (MonadWriter(..))
-import Control.Monad.Reader (ReaderT(..))
-import Data.Typeable (Typeable)
-import Data.Map (Map)
-import Data.Data (Data)
 import Data.Void (Void)
-import Documentation.Haddock.Types
-import GHC.Types.Basic (PromotionFlag(..))
-import GHC.Types.Fixity (Fixity(..))
-import GHC.Types.Var (Specificity)
-import Data.ByteString.Builder
-import qualified Data.List  as List
-import Control.Monad.Trans (lift)
-import qualified Data.ByteString.Lazy as BSL
 
 import GHC
-import GHC.Driver.Session (Language)
-import qualified GHC.LanguageExtensions as LangExt
 import GHC.Types.Name.Occurrence
-import GHC.Utils.Outputable hiding ((<>))
+import GHC.Types.Var (Specificity)
 
 -----------------------------------------------------------------------------
 -- * Convenient synonyms
 -----------------------------------------------------------------------------
 
 
-type IfaceMap      = Map Module Interface
-type InstIfaceMap  = Map Module InstalledInterface  -- TODO: rename
 type DocMap a      = Map Name (MDoc a)
 type ArgMap a      = Map Name (Map Int (MDoc a))
-type SubMap        = Map Name [Name]
 type DeclMap       = Map Name [LHsDecl GhcRn]
-type InstMap       = Map RealSrcSpan Name
-type FixMap        = Map Name Fixity
-type DocPaths      = (FilePath, Maybe FilePath) -- paths to HTML and sources
-
-
------------------------------------------------------------------------------
--- * Interface
------------------------------------------------------------------------------
-
-
--- | 'Interface' holds all information used to render a single Haddock page.
--- It represents the /interface/ of a module. The core business of Haddock
--- lies in creating this structure. Note that the record contains some fields
--- that are only used to create the final record, and that are not used by the
--- backends.
-data Interface = Interface
-  {
-    -- | The module behind this interface.
-    ifaceMod             :: !Module
-
-    -- | Is this a signature?
-  , ifaceIsSig           :: !Bool
-
-    -- | Original file name of the module.
-  , ifaceOrigFilename    :: !FilePath
-
-    -- | Textual information about the module.
-  , ifaceInfo            :: !(HaddockModInfo Name)
-
-    -- | Documentation header.
-  , ifaceDoc             :: !(Documentation Name)
-
-    -- | Documentation header with cross-reference information.
-  , ifaceRnDoc           :: !(Documentation DocName)
-
-    -- | Haddock options for this module (prune, ignore-exports, etc).
-  , ifaceOptions         :: ![DocOption]
-
-    -- | Declarations originating from the module. Excludes declarations without
-    -- names (instances and stand-alone documentation comments). Includes
-    -- names of subordinate declarations mapped to their parent declarations.
-  , ifaceDeclMap         :: !(Map Name [LHsDecl GhcRn])
-
-    -- | Documentation of declarations originating from the module (including
-    -- subordinates).
-  , ifaceDocMap          :: !(DocMap Name)
-  , ifaceArgMap          :: !(ArgMap Name)
-
-    -- | Documentation of declarations originating from the module (including
-    -- subordinates).
-  , ifaceRnDocMap        :: !(DocMap DocName)
-  , ifaceRnArgMap        :: !(ArgMap DocName)
-
-  , ifaceFixMap          :: !(Map Name Fixity)
-
-  , ifaceExportItems     :: ![ExportItem GhcRn]
-  , ifaceRnExportItems   :: ![ExportItem DocNameI]
-
-    -- | All names exported by the module.
-  , ifaceExports         :: ![Name]
-
-    -- | All \"visible\" names exported by the module.
-    -- A visible name is a name that will show up in the documentation of the
-    -- module.
-  , ifaceVisibleExports  :: ![Name]
-
-    -- | Aliases of module imports as in @import A.B.C as C@.
-  , ifaceModuleAliases   :: !AliasMap
-
-    -- | Instances exported by the module.
-  , ifaceInstances       :: ![ClsInst]
-  , ifaceFamInstances    :: ![FamInst]
-
-    -- | Orphan instances
-  , ifaceOrphanInstances :: ![DocInstance GhcRn]
-  , ifaceRnOrphanInstances :: ![DocInstance DocNameI]
-
-    -- | The number of haddockable and haddocked items in the module, as a
-    -- tuple. Haddockable items are the exports and the module itself.
-  , ifaceHaddockCoverage :: !(Int, Int)
-
-    -- | Warnings for things defined in this module.
-  , ifaceWarningMap :: !WarningMap
-
-    -- | Tokenized source code of module (available if Haddock is invoked with
-    -- source generation flag).
-  , ifaceHieFile :: !(Maybe FilePath)
-  , ifaceDynFlags :: !DynFlags
-  }
 
 type WarningMap = Map Name (Doc Name)
-
-
--- | A subset of the fields of 'Interface' that we store in the interface
--- files.
-data InstalledInterface = InstalledInterface
-  {
-    -- | The module represented by this interface.
-    instMod              :: Module
-
-    -- | Is this a signature?
-  , instIsSig            :: Bool
-
-    -- | Textual information about the module.
-  , instInfo             :: HaddockModInfo Name
-
-    -- | Documentation of declarations originating from the module (including
-    -- subordinates).
-  , instDocMap           :: DocMap Name
-
-  , instArgMap           :: ArgMap Name
-
-    -- | All names exported by this module.
-  , instExports          :: [Name]
-
-    -- | All \"visible\" names exported by the module.
-    -- A visible name is a name that will show up in the documentation of the
-    -- module.
-  , instVisibleExports   :: [Name]
-
-    -- | Haddock options for this module (prune, ignore-exports, etc).
-  , instOptions          :: [DocOption]
-
-  , instFixMap           :: Map Name Fixity
-  }
-
-
--- | Convert an 'Interface' to an 'InstalledInterface'
-toInstalledIface :: Interface -> InstalledInterface
-toInstalledIface interface = InstalledInterface
-  { instMod              = ifaceMod              interface
-  , instIsSig            = ifaceIsSig            interface
-  , instInfo             = ifaceInfo             interface
-  , instDocMap           = ifaceDocMap           interface
-  , instArgMap           = ifaceArgMap           interface
-  , instExports          = ifaceExports          interface
-  , instVisibleExports   = ifaceVisibleExports   interface
-  , instOptions          = ifaceOptions          interface
-  , instFixMap           = ifaceFixMap           interface
-  }
-
 
 -----------------------------------------------------------------------------
 -- * Export items & declarations
 -----------------------------------------------------------------------------
 
-
-data ExportItem name
-
-  -- | An exported declaration.
-  = ExportDecl
-      {
-        -- | A declaration.
-        expItemDecl :: !(LHsDecl name)
+data Pollock_ExportDecl name =
+  Pollock_ExportDecl
+    {
+         -- | A declaration.
+        pollock_expItemDecl :: !(LHsDecl name)
 
         -- | Bundled patterns for a data type declaration
-      , expItemPats :: ![(HsDecl name, DocForDecl (IdP name))]
+      , pollock_expItemPats :: ![(HsDecl name, DocForDecl (IdP name))]
+      -- POL-TODO The Docs for bundled patterns aren't included in the coverage report!!
 
         -- | Maybe a doc comment, and possibly docs for arguments (if this
         -- decl is a function or type-synonym).
-      , expItemMbDoc :: !(DocForDecl (IdP name))
+      , pollock_expItemMbDoc :: !(DocForDecl (IdP name))
 
         -- | Subordinate names, possibly with documentation.
-      , expItemSubDocs :: ![(IdP name, DocForDecl (IdP name))]
+      , pollock_expItemSubDocs :: ![(IdP name, DocForDecl (IdP name))]
 
         -- | Instances relevant to this declaration, possibly with
         -- documentation.
-      , expItemInstances :: ![DocInstance name]
+      -- , pollock_expItemInstances :: ![DocInstance name]
+      -- POL-TODO Instances are not used in the coverage report! :( We should look for instances and count them as haddockable...
 
         -- | Fixity decls relevant to this declaration (including subordinates).
-      , expItemFixities :: ![(IdP name, Fixity)]
+      -- , pollock_expItemFixities :: ![(IdP name, Fixity)]
 
-        -- | Whether the ExportItem is from a TH splice or not, for generating
-        -- the appropriate type of Source link.
-      , expItemSpliced :: !Bool
-      }
+    }
 
-  -- | An exported entity for which we have no documentation (perhaps because it
-  -- resides in another package).
-  | ExportNoDecl
-      { expItemName :: !(IdP name)
+data Pollock_ExportNoDecl name =
+  Pollock_ExportNoDecl
+      { pollock_expItemName :: !(IdP name)
 
         -- | Subordinate names.
-      , expItemSubs :: ![IdP name]
+      , pollock_expItemSubs :: ![IdP name]
       }
 
-  -- | A section heading.
-  | ExportGroup
+data Pollock_ExportGroup name = Pollock_ExportGroup
       {
         -- | Section level (1, 2, 3, ...).
-        expItemSectionLevel :: !Int
+        pollock_expItemSectionLevel :: !Int
 
         -- | Section id (for hyperlinks).
-      , expItemSectionId :: !String
+      , pollock_expItemSectionId :: !String
 
         -- | Section heading text.
-      , expItemSectionText :: !(Doc (IdP name))
+      , pollock_expItemSectionText :: !(Doc (IdP name))
       }
 
-  -- | Some documentation.
-  | ExportDoc !(MDoc (IdP name))
+newtype Pollock_ExportDoc name = Pollock_ExportDoc (MDoc (IdP name))
+newtype Pollock_ExportModule = Pollock_ExportModule Module
 
-  -- | A cross-reference to another module.
-  | ExportModule !Module
+data Pollock_ExportItem name =
+  Pollock_ExportItemDecl (Pollock_ExportDecl name)
+  | Pollock_ExportItemNoDecl (Pollock_ExportNoDecl name)
+  | Pollock_ExportItemGroup (Pollock_ExportGroup name)
+  | Pollock_ExportItemDoc (Pollock_ExportDoc name)
+  | Pollock_ExportItemModule Pollock_ExportModule
+
+pollock_mkExportGroup :: Int -> String -> Doc (IdP name) -> Pollock_ExportItem name
+pollock_mkExportGroup sectionLevel sectionId = Pollock_ExportItemGroup . Pollock_ExportGroup sectionLevel sectionId
+
+pollock_mkExportDoc :: MDoc (IdP name) -> Pollock_ExportItem name
+pollock_mkExportDoc = Pollock_ExportItemDoc . Pollock_ExportDoc
 
 data Documentation name = Documentation
   { documentationDoc :: Maybe (MDoc name)
   , documentationWarning :: !(Maybe (Doc name))
-  } deriving Functor
+  }
 
 
 -- | Arguments and result are indexed by Int, zero-based from the left,
@@ -304,9 +143,6 @@ noDocForDecl = (Documentation Nothing Nothing, mempty)
 -----------------------------------------------------------------------------
 
 
--- | Type of environment used to cross-reference identifiers in the syntax.
-type LinkEnv = Map Name Module
-
 -- | An 'RdrName' tagged with some type/value namespace information.
 data NsRdrName = NsRdrName
   { namespace :: !Namespace
@@ -322,45 +158,12 @@ data DocName
   | Undocumented Name
      -- ^ This thing is not part of the (existing or resulting)
      -- documentation, as far as Haddock knows.
-  deriving (Eq, Data)
 
 data DocNameI
 
 type instance NoGhcTc DocNameI = DocNameI
 
 type instance IdP DocNameI = DocName
-
-instance CollectPass DocNameI where
-  collectXXPat _ ext = dataConCantHappen ext
-  collectXXHsBindsLR ext = dataConCantHappen ext
-
-instance NamedThing DocName where
-  getName (Documented name _) = name
-  getName (Undocumented name) = name
-
--- | Useful for debugging
-instance Outputable DocName where
-  ppr = ppr . getName
-
-instance OutputableBndr DocName where
-  pprBndr _ = ppr . getName
-  pprPrefixOcc = pprPrefixOcc . getName
-  pprInfixOcc = pprInfixOcc . getName
-
-class NamedThing name => SetName name where
-
-    setName :: Name -> name -> name
-
-
-instance SetName Name where
-
-    setName name' _ = name'
-
-
-instance SetName DocName where
-
-    setName name' (Documented _ mdl) = Documented name' mdl
-    setName name' (Undocumented _) = Undocumented name'
 
 -- | Adds extra "wrapper" information to a name.
 --
@@ -370,209 +173,20 @@ data Wrap n
   = Unadorned { unwrap :: n  }     -- ^ don't do anything to the name
   | Parenthesized { unwrap :: n }  -- ^ add parentheses around the name
   | Backticked { unwrap :: n }     -- ^ add backticks around the name
-  deriving (Show, Functor, Foldable, Traversable)
-
--- | Useful for debugging
-instance Outputable n => Outputable (Wrap n) where
-  ppr (Unadorned n)     = ppr n
-  ppr (Parenthesized n) = hcat [ char '(', ppr n, char ')' ]
-  ppr (Backticked n)    = hcat [ char '`', ppr n, char '`' ]
+  deriving (Functor)
 
 showWrapped :: (a -> String) -> Wrap a -> String
 showWrapped f (Unadorned n) = f n
 showWrapped f (Parenthesized n) = "(" ++ f n ++ ")"
 showWrapped f (Backticked n) = "`" ++ f n ++ "`"
 
-instance HasOccName DocName where
-
-    occName = occName . getName
-
------------------------------------------------------------------------------
--- * Instances
------------------------------------------------------------------------------
-
--- | The three types of instances
-data InstType name
-  = ClassInst
-      { clsiCtx :: [HsType name]
-      , clsiTyVars :: LHsQTyVars name
-      , clsiSigs :: [Sig name]
-      , clsiAssocTys :: [PseudoFamilyDecl name]
-      }
-  | TypeInst  (Maybe (HsType name)) -- ^ Body (right-hand side)
-  | DataInst (TyClDecl name)        -- ^ Data constructors
-
-instance (OutputableBndrId p)
-         => Outputable (InstType (GhcPass p)) where
-  ppr (ClassInst { .. }) = text "ClassInst"
-      <+> ppr clsiCtx
-      <+> ppr clsiTyVars
-      <+> ppr clsiSigs
-  ppr (TypeInst  a) = text "TypeInst"  <+> ppr a
-  ppr (DataInst  a) = text "DataInst"  <+> ppr a
-
-
--- | Almost the same as 'FamilyDecl' except for type binders.
---
--- In order to perform type specialization for class instances, we need to
--- substitute class variables to appropriate type. However, type variables in
--- associated type are specified using 'LHsTyVarBndrs' instead of 'HsType'.
--- This makes type substitution impossible and to overcome this issue,
--- 'PseudoFamilyDecl' type is introduced.
-data PseudoFamilyDecl name = PseudoFamilyDecl
-    { pfdInfo :: FamilyInfo name
-    , pfdLName :: LocatedN (IdP name)
-    , pfdTyVars :: [LHsType name]
-    , pfdKindSig :: LFamilyResultSig name
-    }
-
-
-mkPseudoFamilyDecl :: FamilyDecl GhcRn -> PseudoFamilyDecl GhcRn
-mkPseudoFamilyDecl (FamilyDecl { .. }) = PseudoFamilyDecl
-    { pfdInfo = fdInfo
-    , pfdLName = fdLName
-    , pfdTyVars = [ L loc (mkType bndr) | L loc bndr <- hsq_explicit fdTyVars ]
-    , pfdKindSig = fdResultSig
-    }
-  where
-    mkType :: HsTyVarBndr flag GhcRn -> HsType GhcRn
-    mkType (KindedTyVar _ _ (L loc name) lkind) =
-        HsKindSig noAnn tvar lkind
-      where
-        tvar = L (na2la loc) (HsTyVar noAnn NotPromoted (L loc name))
-    mkType (UserTyVar _ _ name) = HsTyVar noAnn NotPromoted name
-
-
--- | An instance head that may have documentation and a source location.
-type DocInstance name = (InstHead name, Maybe (MDoc (IdP name)), Located (IdP name), Maybe Module)
-
--- | The head of an instance. Consists of a class name, a list of type
--- parameters (which may be annotated with kinds), and an instance type
-data InstHead name = InstHead
-    { ihdClsName :: IdP name
-    , ihdTypes :: [HsType name]
-    , ihdInstType :: InstType name
-    }
-
-
--- | An instance origin information.
---
--- This is used primarily in HTML backend to generate unique instance
--- identifiers (for expandable sections).
-data InstOrigin name
-    = OriginClass name
-    | OriginData name
-    | OriginFamily name
-
-
-instance NamedThing name => NamedThing (InstOrigin name) where
-
-    getName (OriginClass name) = getName name
-    getName (OriginData name) = getName name
-    getName (OriginFamily name) = getName name
-
-
 -----------------------------------------------------------------------------
 -- * Documentation comments
 -----------------------------------------------------------------------------
 
 
-type LDoc id = Located (Doc id)
-
 type Doc id = DocH (Wrap (ModuleName, OccName)) (Wrap id)
 type MDoc id = MetaDoc (Wrap (ModuleName, OccName)) (Wrap id)
-
-type DocMarkup id a = DocMarkupH (Wrap (ModuleName, OccName)) id a
-
-instance (NFData a, NFData mod)
-         => NFData (DocH mod a) where
-  rnf doc = case doc of
-    DocEmpty                  -> ()
-    DocAppend a b             -> a `deepseq` b `deepseq` ()
-    DocString a               -> a `deepseq` ()
-    DocParagraph a            -> a `deepseq` ()
-    DocIdentifier a           -> a `deepseq` ()
-    DocIdentifierUnchecked a  -> a `deepseq` ()
-    DocModule a               -> a `deepseq` ()
-    DocWarning a              -> a `deepseq` ()
-    DocEmphasis a             -> a `deepseq` ()
-    DocBold a                 -> a `deepseq` ()
-    DocMonospaced a           -> a `deepseq` ()
-    DocUnorderedList a        -> a `deepseq` ()
-    DocOrderedList a          -> a `deepseq` ()
-    DocDefList a              -> a `deepseq` ()
-    DocCodeBlock a            -> a `deepseq` ()
-    DocHyperlink a            -> a `deepseq` ()
-    DocPic a                  -> a `deepseq` ()
-    DocMathInline a           -> a `deepseq` ()
-    DocMathDisplay a          -> a `deepseq` ()
-    DocAName a                -> a `deepseq` ()
-    DocProperty a             -> a `deepseq` ()
-    DocExamples a             -> a `deepseq` ()
-    DocHeader a               -> a `deepseq` ()
-    DocTable a                -> a `deepseq` ()
-
-#if !MIN_VERSION_ghc(8,0,2)
--- These were added to GHC itself in 8.0.2
-instance NFData Name where rnf x = seq x ()
-instance NFData OccName where rnf x = seq x ()
-instance NFData ModuleName where rnf x = seq x ()
-#endif
-
-instance NFData id => NFData (Header id) where
-  rnf (Header a b) = a `deepseq` b `deepseq` ()
-
-instance NFData id => NFData (Hyperlink id) where
-  rnf (Hyperlink a b) = a `deepseq` b `deepseq` ()
-
-instance NFData id => NFData (ModLink id) where
-  rnf (ModLink a b) = a `deepseq` b `deepseq` ()
-
-instance NFData Picture where
-  rnf (Picture a b) = a `deepseq` b `deepseq` ()
-
-instance NFData Example where
-  rnf (Example a b) = a `deepseq` b `deepseq` ()
-
-instance NFData id => NFData (Table id) where
-    rnf (Table h b) = h `deepseq` b `deepseq` ()
-
-instance NFData id => NFData (TableRow id) where
-    rnf (TableRow cs) = cs `deepseq` ()
-
-instance NFData id => NFData (TableCell id) where
-    rnf (TableCell i j c) = i `deepseq` j `deepseq` c `deepseq` ()
-
-exampleToString :: Example -> String
-exampleToString (Example expression result) =
-    ">>> " ++ expression ++ "\n" ++  unlines result
-
-data HaddockModInfo name = HaddockModInfo
-  { hmi_description :: Maybe (Doc name)
-  , hmi_copyright   :: Maybe String
-  , hmi_license     :: Maybe String
-  , hmi_maintainer  :: Maybe String
-  , hmi_stability   :: Maybe String
-  , hmi_portability :: Maybe String
-  , hmi_safety      :: Maybe String
-  , hmi_language    :: Maybe Language
-  , hmi_extensions  :: [LangExt.Extension]
-  }
-
-
-emptyHaddockModInfo :: HaddockModInfo a
-emptyHaddockModInfo = HaddockModInfo
-  { hmi_description = Nothing
-  , hmi_copyright   = Nothing
-  , hmi_license     = Nothing
-  , hmi_maintainer  = Nothing
-  , hmi_stability   = Nothing
-  , hmi_portability = Nothing
-  , hmi_safety      = Nothing
-  , hmi_language    = Nothing
-  , hmi_extensions  = []
-  }
-
 
 -----------------------------------------------------------------------------
 -- * Options
@@ -587,61 +201,7 @@ data DocOption
   | OptNotHome         -- ^ Not the best place to get docs for things
                        -- exported by this module.
   | OptShowExtensions  -- ^ Render enabled extensions for this module.
-  deriving (Eq, Show)
-
-
--- | Option controlling how to qualify names
-data QualOption
-  = OptNoQual         -- ^ Never qualify any names.
-  | OptFullQual       -- ^ Qualify all names fully.
-  | OptLocalQual      -- ^ Qualify all imported names fully.
-  | OptRelativeQual   -- ^ Like local, but strip module prefix
-                      --   from modules in the same hierarchy.
-  | OptAliasedQual    -- ^ Uses aliases of module names
-                      --   as suggested by module import renamings.
-                      --   However, we are unfortunately not able
-                      --   to maintain the original qualifications.
-                      --   Image a re-export of a whole module,
-                      --   how could the re-exported identifiers be qualified?
-
-type AliasMap = Map Module ModuleName
-
-data Qualification
-  = NoQual
-  | FullQual
-  | LocalQual Module
-  | RelativeQual Module
-  | AliasedQual AliasMap Module
-       -- ^ @Module@ contains the current module.
-       --   This way we can distinguish imported and local identifiers.
-
-makeContentsQual :: QualOption -> Qualification
-makeContentsQual qual =
-  case qual of
-    OptNoQual -> NoQual
-    _         -> FullQual
-
-makeModuleQual :: QualOption -> AliasMap -> Module -> Qualification
-makeModuleQual qual aliases mdl =
-  case qual of
-    OptLocalQual      -> LocalQual mdl
-    OptRelativeQual   -> RelativeQual mdl
-    OptAliasedQual    -> AliasedQual aliases mdl
-    OptFullQual       -> FullQual
-    OptNoQual         -> NoQual
-
--- | Whether to hide empty contexts
--- Since pattern synonyms have two contexts with different semantics, it is
--- important to all of them, even if one of them is empty.
-data HideEmptyContexts
-  = HideEmptyContexts
-  | ShowEmptyToplevelContexts
-
--- | When to qualify @since@ annotations with their package
-data SinceQual
-  = Always
-  | External -- ^ only qualify when the thing being annotated is from
-             -- an external package
+  deriving (Eq)
 
 -----------------------------------------------------------------------------
 -- * Error handling
@@ -695,67 +255,11 @@ singleMessage m = ErrorMessages $ (m :)
 errorMessagesToList :: ErrorMessages -> [Builder]
 errorMessagesToList messages = unErrorMessages messages []
 
--- Exceptions
-
-
--- | Haddock's own exception type.
-data HaddockException
-  = HaddockException String
-  | WithContext [String] SomeException
-  deriving Typeable
-
-
-instance Show HaddockException where
-  show (HaddockException str) = str
-  show (WithContext ctxts se)  = unlines $ ["While " ++ ctxt ++ ":\n" | ctxt <- reverse ctxts] ++ [show se]
-
-throwE :: String -> a
-instance Exception HaddockException
-throwE str = throw (HaddockException str)
-
-withExceptionContext :: MonadCatch m => String -> m a -> m a
-withExceptionContext ctxt =
-  handle (\ex ->
-      case ex of
-        HaddockException _ -> throwM $ WithContext [ctxt] (toException ex)
-        WithContext ctxts se -> throwM $ WithContext (ctxt:ctxts) se
-          ) .
-  handle (throwM . WithContext [ctxt])
-
--- In "Haddock.Interface.Create", we need to gather
--- @Haddock.Types.ErrMsg@s a lot, like @ErrMsgM@ does,
--- but we can't just use @GhcT ErrMsgM@ because GhcT requires the
--- transformed monad to be MonadIO.
-newtype ErrMsgGhc a = ErrMsgGhc { unErrMsgGhc :: WriterT ErrorMessages Ghc a }
-
-
-deriving newtype instance Functor ErrMsgGhc
-deriving newtype instance Applicative ErrMsgGhc
-deriving newtype instance Monad ErrMsgGhc
-deriving newtype instance ReportErrorMessage ErrMsgGhc
-deriving newtype instance MonadIO ErrMsgGhc
-
-
-runWriterGhc :: ErrMsgGhc a -> Ghc (a, ErrorMessages)
-runWriterGhc = runWriterT . unErrMsgGhc
-
-liftGhcToErrMsgGhc :: Ghc a -> ErrMsgGhc a
-liftGhcToErrMsgGhc = ErrMsgGhc . lift
-
-liftErrMsg :: ErrMsgM a -> ErrMsgGhc a
-liftErrMsg = ErrMsgGhc . writer . runErrMsgM
-
 -----------------------------------------------------------------------------
 -- * Pass sensitive types
 -----------------------------------------------------------------------------
 
 type instance XRec DocNameI a = GenLocated (Anno a) a
-instance UnXRec DocNameI where
-  unXRec = unLoc
-instance MapXRec DocNameI where
-  mapXRec = fmap
-instance WrapXRec DocNameI (HsType DocNameI) where
-  wrapXRec = noLocA
 
 type instance Anno DocName                           = SrcSpanAnnN
 type instance Anno (HsTyVarBndr flag DocNameI)       = SrcSpanAnnA
@@ -778,14 +282,6 @@ type instance Anno (HsDecl DocNameI)                   = SrcSpanAnnA
 type instance Anno (FamilyResultSig DocNameI)          = SrcAnn NoEpAnns
 type instance Anno (HsOuterTyVarBndrs Specificity DocNameI) = SrcSpanAnnA
 type instance Anno (HsSigType DocNameI)                     = SrcSpanAnnA
-
-type XRecCond a
-  = ( XParTy a           ~ EpAnn AnnParen
-    , NoGhcTc a ~ a
-    , MapXRec a
-    , UnXRec a
-    , WrapXRec a (HsType a)
-    )
 
 type instance XForAllTy        DocNameI = EpAnn [AddEpAnn]
 type instance XQualTy          DocNameI = EpAnn [AddEpAnn]
@@ -888,3 +384,140 @@ type instance XCInjectivityAnn DocNameI = NoExtField
 type instance XCFunDep DocNameI = NoExtField
 
 type instance XCTyFamInstDecl DocNameI = NoExtField
+
+-- | With the advent of 'Version', we may want to start attaching more
+-- meta-data to comments. We make a structure for this ahead of time
+-- so we don't have to gut half the core each time we want to add such
+-- info.
+data Meta = Meta { _version :: Maybe Version
+                 , _package :: Maybe Package
+                 }
+
+data MetaDoc mod id =
+  MetaDoc { _meta :: Meta
+          , _doc :: DocH mod id
+          }
+
+overDoc :: (DocH a b -> DocH c d) -> MetaDoc a b -> MetaDoc c d
+overDoc f d = d { _doc = f $ _doc d }
+
+overDocF :: Functor f => (DocH a b -> f (DocH c d)) -> MetaDoc a b -> f (MetaDoc c d)
+overDocF f d = (\x -> d { _doc = x }) <$> f (_doc d)
+
+type Version = [Int]
+type Package = String
+
+data Hyperlink id = Hyperlink
+  { hyperlinkUrl   :: String
+  , hyperlinkLabel :: Maybe id
+  }
+
+data ModLink id = ModLink
+  { modLinkName   :: String
+  , modLinkLabel :: Maybe id
+  }
+
+data Picture = Picture
+  { pictureUri   :: String
+  , pictureTitle :: Maybe String
+  }
+
+data Header id = Header
+  { headerLevel :: Int  -- ^ between 1 and 6 inclusive
+  , headerTitle :: id
+  }
+
+data Example = Example
+  { exampleExpression :: String
+  , exampleResult     :: [String]
+  }
+
+data TableCell id = TableCell
+  { tableCellColspan  :: Int
+  , tableCellRowspan  :: Int
+  , tableCellContents :: id
+  } deriving (Functor, Foldable, Traversable)
+
+newtype TableRow id = TableRow
+  { tableRowCells :: [TableCell id]
+  } deriving (Functor, Foldable, Traversable)
+
+data Table id = Table
+  { tableHeaderRows :: [TableRow id]
+  , tableBodyRows   :: [TableRow id]
+  } deriving (Functor, Foldable, Traversable)
+
+data DocH mod id
+  = DocEmpty
+  | DocAppend (DocH mod id) (DocH mod id)
+  | DocString String
+  | DocParagraph (DocH mod id)
+  | DocIdentifier id
+  | DocIdentifierUnchecked mod
+  -- ^ A qualified identifier that couldn't be resolved.
+  | DocModule (ModLink (DocH mod id))
+  -- ^ A link to a module, with an optional label.
+  | DocWarning (DocH mod id)
+  -- ^ This constructor has no counterpart in Haddock markup.
+  | DocEmphasis (DocH mod id)
+  | DocMonospaced (DocH mod id)
+  | DocBold (DocH mod id)
+  | DocUnorderedList [DocH mod id]
+  | DocOrderedList [(Int, DocH mod id)]
+  | DocDefList [(DocH mod id, DocH mod id)]
+  | DocCodeBlock (DocH mod id)
+  | DocHyperlink (Hyperlink (DocH mod id))
+  | DocPic Picture
+  | DocMathInline String
+  | DocMathDisplay String
+  | DocAName String
+  -- ^ A (HTML) anchor. It must not contain any spaces.
+  | DocProperty String
+  | DocExamples [Example]
+  | DocHeader (Header (DocH mod id))
+  | DocTable (Table (DocH mod id))
+
+-- | The namespace qualification for an identifier.
+data Namespace = Value | Type | None
+
+-- | Render the a namespace into the same format it was initially parsed.
+renderNs :: Namespace -> String
+renderNs Value = "v"
+renderNs Type = "t"
+renderNs None = ""
+
+
+-- | 'DocMarkupH' is a set of instructions for marking up documentation.
+-- In fact, it's really just a mapping from 'Doc' to some other
+-- type [a], where [a] is usually the type of the output (HTML, say).
+-- Use 'Documentation.Haddock.Markup.markup' to apply a 'DocMarkupH' to
+-- a 'DocH'.
+--
+-- @since 1.4.5
+--
+data DocMarkupH mod id a = Markup
+  { markupEmpty                :: a
+  , markupString               :: String -> a
+  , markupParagraph            :: a -> a
+  , markupAppend               :: a -> a -> a
+  , markupIdentifier           :: id -> a
+  , markupIdentifierUnchecked  :: mod -> a
+  , markupModule               :: ModLink a -> a
+  , markupWarning              :: a -> a
+  , markupEmphasis             :: a -> a
+  , markupBold                 :: a -> a
+  , markupMonospaced           :: a -> a
+  , markupUnorderedList        :: [a] -> a
+  , markupOrderedList          :: [(Int,a)] -> a
+  , markupDefList              :: [(a,a)] -> a
+  , markupCodeBlock            :: a -> a
+  , markupHyperlink            :: Hyperlink a -> a
+  , markupAName                :: String -> a
+  , markupPic                  :: Picture -> a
+  , markupMathInline           :: String -> a
+  , markupMathDisplay          :: String -> a
+  , markupProperty             :: String -> a
+  , markupExample              :: [Example] -> a
+  , markupHeader               :: Header a -> a
+  , markupTable                :: Table a -> a
+  }

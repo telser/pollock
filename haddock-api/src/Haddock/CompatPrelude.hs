@@ -1,9 +1,9 @@
 -- | Bridge impedance mismatch of different @base@ versions back till @base-4.5@ (GHC 7.4.2)
 module Haddock.CompatPrelude
-    ( ($>)
-    , isSymbolChar
-    ) where
+  ( ($>)
+  , isSymbolChar
+  ) where
 
-import           Data.Functor                ( ($>) )
+import Data.Functor (($>))
 
-import           Text.Read.Lex                      (isSymbolChar)
+import Text.Read.Lex (isSymbolChar)

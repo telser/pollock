@@ -1,14 +1,20 @@
-module Haddock.Doc (docParagraph, docAppend,
-                                  docConcat, metaDocConcat,
-                                  metaDocAppend, emptyMetaDoc,
-                                  metaAppend) where
+module Haddock.Doc
+  ( docParagraph
+  , docAppend
+  , docConcat
+  , metaDocConcat
+  , metaDocAppend
+  , emptyMetaDoc
+  , metaAppend
+  ) where
 
-import Control.Applicative ((<|>), empty)
+import Control.Applicative (empty, (<|>))
 
 import Haddock.Types
-    ( DocH(DocParagraph, DocEmpty, DocString, DocAppend),
-      MetaDoc(..),
-      Meta(Meta) )
+  ( DocH (DocAppend, DocEmpty, DocParagraph, DocString)
+  , Meta (Meta)
+  , MetaDoc (..)
+  )
 
 docConcat :: [DocH mod id] -> DocH mod id
 docConcat = foldr docAppend DocEmpty
@@ -17,21 +23,24 @@ docConcat = foldr docAppend DocEmpty
 metaDocConcat :: [MetaDoc mod id] -> MetaDoc mod id
 metaDocConcat = foldr metaDocAppend emptyMetaDoc
 
--- | We do something perhaps unexpected here and join the meta info
--- in ‘reverse’: this results in the metadata from the ‘latest’
--- paragraphs taking precedence.
+{- | We do something perhaps unexpected here and join the meta info
+in ‘reverse’: this results in the metadata from the ‘latest’
+paragraphs taking precedence.
+-}
 metaDocAppend :: MetaDoc mod id -> MetaDoc mod id -> MetaDoc mod id
-metaDocAppend (MetaDoc { _meta = m, _doc = d })
-              (MetaDoc { _meta = m', _doc = d' }) =
-  MetaDoc { _meta = m' `metaAppend` m, _doc = d `docAppend` d' }
+metaDocAppend
+  (MetaDoc{_meta = m, _doc = d})
+  (MetaDoc{_meta = m', _doc = d'}) =
+    MetaDoc{_meta = m' `metaAppend` m, _doc = d `docAppend` d'}
 
--- | This is not a monoidal append, it uses '<|>' for the '_version' and
--- '_package'.
+{- | This is not a monoidal append, it uses '<|>' for the '_version' and
+'_package'.
+-}
 metaAppend :: Meta -> Meta -> Meta
 metaAppend (Meta v1 p1) (Meta v2 p2) = Meta (v1 <|> v2) (p1 <|> p2)
 
 emptyMetaDoc :: MetaDoc mod id
-emptyMetaDoc = MetaDoc { _meta = emptyMeta, _doc = DocEmpty }
+emptyMetaDoc = MetaDoc{_meta = emptyMeta, _doc = DocEmpty}
 
 emptyMeta :: Meta
 emptyMeta = Meta empty empty

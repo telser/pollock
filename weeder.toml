@@ -1,3 +1,3 @@
-roots = [ "Haddock.Interface.Coverage.*" ]
+roots = [ "Haddock.Interface.Coverage.*", "^Paths_.*"]
 type-class-roots = false
 unused-types = true

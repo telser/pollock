@@ -38,6 +38,7 @@ library
                , containers
                , mtl
                , transformers
+               , ghc-boot
 
   hs-source-dirs: src
 
@@ -58,19 +59,19 @@ library
     Haddock.Interface.Coverage
 
   other-modules:
+    CompatGHC
     Haddock.CompatPrelude
+    Haddock.Convert
     Haddock.Doc
-    Haddock.Markup
+    Haddock.GhcUtils
+    Haddock.Interface.LexParseRn
+    Haddock.Interface.ParseModuleHeader
+    Haddock.Options
+    Haddock.Parser
     Haddock.Parser.Identifier
     Haddock.Parser.Monad
     Haddock.Parser.Util
-    Haddock.Interface.LexParseRn
-    Haddock.Parser
-    Haddock.Utils
     Haddock.Types
-    Haddock.Options
-    Haddock.GhcUtils
-    Haddock.Convert
     Paths_haddock_api
 
   autogen-modules:

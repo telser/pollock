@@ -196,28 +196,6 @@ restrictDecls names = mapMaybe (filterLSigNames (`elem` names))
 restrictATs :: [Name] -> [LFamilyDecl GhcRn] -> [LFamilyDecl GhcRn]
 restrictATs names ats = [ at | at <- ats , unLoc (fdLName (unLoc at)) `elem` names ]
 
-
--------------------------------------------------------------------------------
--- * Parenthesization
--------------------------------------------------------------------------------
-
--- | Precedence level (inside the 'HsType' AST).
-data Precedence
-  = PREC_TOP  -- ^ precedence of 'type' production in GHC's parser
-
-  | PREC_SIG  -- ^ explicit type signature
-
-  | PREC_CTX  -- ^ Used for single contexts, eg. ctx => type
-              -- (as opposed to (ctx1, ctx2) => type)
-
-  | PREC_FUN  -- ^ precedence of 'btype' production in GHC's parser
-              -- (used for LH arg of (->))
-
-  | PREC_OP   -- ^ arg of any infix operator
-              -- (we don't keep have fixity info)
-
-  | PREC_CON  -- ^ arg of type application: always parenthesize unless atomic
-
 -------------------------------------------------------------------------------
 -- * Located
 -------------------------------------------------------------------------------

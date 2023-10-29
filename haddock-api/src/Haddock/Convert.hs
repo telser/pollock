@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, OverloadedStrings, PatternGuards, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Haddock.Convert
@@ -18,6 +18,7 @@ module Haddock.Convert (
 ) where
 
 import Data.Either (lefts, rights)
+
 import qualified GHC.Builtin.Names as CompatGHC
 import qualified GHC.Builtin.Types as CompatGHC
 import qualified GHC.Builtin.Types.Prim as CompatGHC
@@ -44,8 +45,8 @@ import qualified GHC.Types.Var.Set as CompatGHC
 import qualified GHC.Utils.Misc as CompatGHC
 import qualified GHC.Utils.Panic.Plain as CompatGHC
 
-import Haddock.Types
 import Haddock.GhcUtils                      ( orderedFVs, defaultRuntimeRepVars, mkEmptySigType )
+import Haddock.Types ( ErrMsg, errMsgUnlines )
 
 import Data.Maybe                            ( catMaybes, mapMaybe, maybeToList )
 
@@ -53,7 +54,7 @@ import Data.Maybe                            ( catMaybes, mapMaybe, maybeToList 
 -- | Whether or not to default 'CompatGHC.RuntimeRep' variables to 'CompatGHC.LiftedRep'. Check
 -- out Note [Defaulting RuntimeRep variables] in GHC.Iface.Type for the
 -- motivation.
-data PrintRuntimeReps = ShowRuntimeRep | HideRuntimeRep deriving Show
+data PrintRuntimeReps = ShowRuntimeRep | HideRuntimeRep
 
 -- the main function here! yay!
 tyThingToLHsDecl

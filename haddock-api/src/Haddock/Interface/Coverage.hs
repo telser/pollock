@@ -32,12 +32,16 @@ import Haddock.Doc (metaDocAppend)
 import Haddock.GhcUtils (addClassContext, filterSigNames, lHsQTyVarsToTypes, mkEmptySigType, moduleString, parents,
                          pretty, restrictTo, sigName, unL)
 import Haddock.Interface.LexParseRn
-import Haddock.Options (Flag (..), modulePackageInfo)
+    ( processDocStrings,
+      processDocStringParas,
+      processDocString,
+      processDocStringFromString,
+      processModuleHeader )
+import Haddock.Options (modulePackageInfo)
 import Haddock.Types
-import Haddock.Utils (replace)
 
+import qualified Control.Applicative as Applicative
 import Control.Monad (liftM)
-import qualified Data.String as String
 import qualified Control.Monad.IO.Class as MIO
 import Control.Monad.Reader (MonadReader (..), ReaderT, asks, runReaderT)
 import Control.Monad.Trans (lift)
@@ -50,35 +54,17 @@ import qualified Data.IntMap as IM
 import Data.List (find, foldl')
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, fromJust, isJust, maybeToList)
+import Data.Maybe (fromJust, isJust, maybeToList)
+import qualified Data.String as String
 import Data.Traversable (for)
 
+import CompatGHC
+
 import GHC hiding (lookupName)
-import GHC.Core.Class (ClassMinimalDef, classMinimalDef)
-import GHC.Core.ConLike (ConLike (..))
-import GHC.Data.FastString (unpackFS)
-import GHC.Driver.Env
-import GHC.Driver.Ppr (showSDoc)
-import GHC.HsToCore.Docs hiding (mkMaps, unionArgMaps)
-import GHC.IORef (readIORef)
-import GHC.Stack (HasCallStack)
-import GHC.Tc.Types hiding (IfM)
 import qualified GHC.Types.Avail as Avail
 import GHC.Types.Avail hiding (avail)
-import GHC.Types.Basic (PromotionFlag (..))
-import GHC.Types.Name (getOccString, getSrcSpan, isDataConName, isValName, nameIsLocalOrFrom, nameOccName, emptyOccEnv)
-import GHC.Types.Name.Env (lookupNameEnv)
-import GHC.Types.Name.Reader (GlobalRdrEnv, globalRdrEnvElts, greMangledName, gresToAvailInfo, isLocalGRE, lookupGlobalRdrEnv)
-import GHC.Types.Name.Set (elemNameSet, mkNameSet)
-import GHC.Types.SourceFile (HscSource (..))
-import GHC.Types.SourceText (SourceText (..), sl_fs)
 import qualified GHC.Types.SrcLoc as SrcLoc
-import GHC.Types.Unique.Map
-import GHC.Unit.Env
-import GHC.Unit.Module.Warnings
-import GHC.Unit.State (PackageName (..))
 import qualified GHC.Utils.Outputable as O
-import GHC.Utils.Panic (pprPanic)
 
 newtype IfEnv m = IfEnv
   {
@@ -96,7 +82,7 @@ newtype IfEnv m = IfEnv
 newtype IfM m a = IfM { unIfM :: ReaderT (IfEnv m) (WriterT ErrorMessages m) a }
 
 deriving newtype instance Functor m => Functor (IfM m)
-deriving newtype instance Monad m => Applicative (IfM m)
+deriving newtype instance Monad m => Applicative.Applicative (IfM m)
 deriving newtype instance Monad m => Monad (IfM m)
 deriving newtype instance MIO.MonadIO m => MIO.MonadIO (IfM m)
 deriving newtype instance Monad m => MonadReader (IfEnv m) (IfM m)
@@ -119,7 +105,7 @@ runIfM lookup_name action = do
       {
         ife_lookup_name = lookup_name
       }
-  fmap errorMessagesToList <$> runWriterT (runReaderT (unIfM action) if_env)
+  fmap errorMessagesToList Applicative.<$> runWriterT (runReaderT (unIfM action) if_env)
 
 liftErrMsg :: Monad m => ErrMsgM a -> IfM m a
 liftErrMsg action = do
@@ -130,19 +116,17 @@ lookupName name = IfM $ do
   lookup_name <- asks ife_lookup_name
   lift $ lift (lookup_name name)
 
-pollock_getCoverage :: MIO.MonadIO m => [Flag]
-                     -> TcGblEnv
+pollock_getCoverage :: MIO.MonadIO m
+                    => TcGblEnv
                      -> HscEnv
                      -> ModSummary
                      -> IfM m (Int, Int)
-pollock_getCoverage flags tcGblEnv hscEnv modSummary = do
-  let dflags = ms_hspp_opts modSummary
-  doc_opts <- liftErrMsg $ mkDocOpts (haddockOptions dflags) flags (tcg_mod tcGblEnv)
-
+pollock_getCoverage tcGblEnv hscEnv modSummary = do
   let
+    dflags = ms_hspp_opts modSummary
     unitState = ue_units $ hsc_unit_env hscEnv
     (pkg_name_fs, _) =
-      modulePackageInfo unitState flags (Just (tcg_mod tcGblEnv))
+      modulePackageInfo unitState (Just (tcg_mod tcGblEnv))
 
     pkg_name :: Maybe Package
     pkg_name =
@@ -160,21 +144,27 @@ pollock_getCoverage flags tcGblEnv hscEnv modSummary = do
       ]
 
     is_sig = (tcg_src tcGblEnv) == HsigFile
-    exportedNames = exported_names doc_opts tcGblEnv
+    exportedNames = exported_names tcGblEnv
     -- Warnings on declarations in this module
   decl_warnings <- liftErrMsg (mkWarningMap dflags (tcg_warns tcGblEnv) (tcg_rdr_env tcGblEnv) exportedNames)
 
   ds <- decls tcGblEnv
+ -- Infer module safety
+  safety   <- MIO.liftIO (finalSafeMode dflags tcGblEnv)
 
   -- The docs added via Template Haskell's putDoc
-  thDocs <- MIO.liftIO . fmap extractTHDocs . readIORef $ tcg_th_docs tcGblEnv
+  thDocs@ExtractedTHDocs { ethd_mod_header = thMbDocStr } <- MIO.liftIO . fmap extractTHDocs . readIORef $ tcg_th_docs tcGblEnv
+
+ -- Process the top-level module header documentation.
+  -- TODO-POL This should be exposed out
+  (!_info, _header_doc) <- liftErrMsg $ processModuleHeader dflags pkg_name
+    (tcg_rdr_env tcGblEnv) safety (fmap hsDocString thMbDocStr Applicative.<|> (hsDocString . unLoc Applicative.<$> (tcg_doc_hdr tcGblEnv)))
 
   maps <- liftErrMsg (pollock_mkMaps dflags pkg_name (tcg_rdr_env tcGblEnv) local_instances ds thDocs)
 
-
   export_items <- pollock_mkExportItems is_sig pkg_name (tcg_mod tcGblEnv) (tcg_semantic_mod tcGblEnv)
     decl_warnings (tcg_rdr_env tcGblEnv) exportedNames (fmap fst ds) maps
-    (imported_modules doc_opts tcGblEnv) (export_list doc_opts tcGblEnv) (actual_exports doc_opts tcGblEnv) dflags
+    (imported_modules tcGblEnv) (export_list tcGblEnv) (tcg_exports tcGblEnv) dflags
   let
     pruned_export_items = pruneExportItems export_items
     !haddockable = 1 + length export_items -- module + exports
@@ -182,13 +172,12 @@ pollock_getCoverage flags tcGblEnv hscEnv modSummary = do
 
   pure (haddockable, haddocked)
 
-
 -- Module imports of the form `import X`. Note that there is
 -- a) no qualification and
 -- b) no import list
-imported_modules :: Foldable t => t DocOption -> TcGblEnv -> Map ModuleName [ModuleName]
-imported_modules doc_opts tcGblEnv
-  | Just{} <- (export_list doc_opts tcGblEnv) =
+imported_modules :: TcGblEnv -> Map ModuleName [ModuleName]
+imported_modules tcGblEnv
+  | Just{} <- (export_list tcGblEnv) =
       unrestrictedModuleImports (fmap unLoc (tcg_rn_imports tcGblEnv))
   | otherwise =
       M.empty
@@ -203,26 +192,16 @@ decls tcGblEnv =
       pure (topDecls dx)
 
 -- All elements of an explicit export list, if present
-export_list :: Foldable t => t DocOption -> TcGblEnv -> Maybe [(IE GhcRn, Avails)]
-export_list doc_opts tcGblEnv
-  | OptIgnoreExports `elem` doc_opts  =
-      Nothing
-  | Just rn_exports <- (tcg_rn_exports tcGblEnv) =
+export_list :: TcGblEnv -> Maybe [(IE GhcRn, Avails)]
+export_list tcGblEnv =
+  case (tcg_rn_exports tcGblEnv) of
+    Just rn_exports ->
       Just [ (ie, avail) | (L _ ie, avail) <- rn_exports ]
-  | otherwise =
-      Nothing
+    Nothing -> Nothing
 
--- All the exported Names of this module.
-actual_exports :: Foldable t => t DocOption -> TcGblEnv -> [AvailInfo]
-actual_exports doc_opts tcGblEnv
-  | OptIgnoreExports `elem` doc_opts  =
-      gresToAvailInfo . filter isLocalGRE $ globalRdrEnvElts $ tcg_rdr_env tcGblEnv
-  | otherwise =
-      tcg_exports tcGblEnv
-
-exported_names :: Foldable t => t DocOption -> TcGblEnv -> [Name]
-exported_names doc_opts =
-  concatMap availNamesWithSelectors . actual_exports doc_opts
+exported_names ::  TcGblEnv -> [Name]
+exported_names =
+  concatMap availNamesWithSelectors . tcg_exports
 
 -- We want to know which modules are imported without any qualification. This
 -- way we can display module reexports more compactly. This mapping also looks
@@ -272,7 +251,7 @@ mkWarningMap dflags warnings gre exps = case warnings of
               | (occ, w) <- ws
               , elt <- lookupGlobalRdrEnv gre occ
               , let n = greMangledName elt, n `elem` exps ]
-    in M.fromList <$> traverse (bitraverse pure (parseWarning dflags gre)) ws'
+    in M.fromList Applicative.<$> traverse (bitraverse pure (parseWarning dflags gre)) ws'
 
 parseWarning :: DynFlags -> GlobalRdrEnv -> WarningTxt a -> ErrMsgM (Doc Name)
 parseWarning dflags gre w = case w of
@@ -280,43 +259,7 @@ parseWarning dflags gre w = case w of
   WarningTxt    _ msg -> format "Warning: "    (foldMap (unpackFS . sl_fs . hsDocString . unLoc) msg)
   where
     format x bs = DocWarning . DocParagraph . DocAppend (DocString x)
-                  <$> processDocStringFromString dflags gre bs
-
-
--------------------------------------------------------------------------------
--- Doc options
---
--- Haddock options that are embedded in the source file
--------------------------------------------------------------------------------
-
-
-mkDocOpts :: Maybe String -> [Flag] -> Module -> ErrMsgM [DocOption]
-mkDocOpts mbOpts flags mdl = do
-  opts <- case mbOpts of
-    Just opts -> case words $ replace ',' ' ' opts of
-      [] -> reportErrorMessage "No option supplied to DOC_OPTION/doc_option" >> return []
-      xs -> liftM catMaybes (mapM parseOption xs)
-    Nothing -> return []
-  pure (foldl go opts flags)
-  where
-    mdlStr = moduleString mdl
-
-    -- Later flags override earlier ones
-    go os m | m == Flag_HideModule mdlStr     = OptHide : os
-            | m == Flag_ShowModule mdlStr     = filter (/= OptHide) os
-            | m == Flag_ShowAllModules        = filter (/= OptHide) os
-            | m == Flag_IgnoreAllExports      = OptIgnoreExports : os
-            | m == Flag_ShowExtensions mdlStr = OptIgnoreExports : os
-            | otherwise                       = os
-
-parseOption :: String -> ErrMsgM (Maybe DocOption)
-parseOption "hide"            = return (Just OptHide)
-parseOption "prune"           = return (Just OptPrune)
-parseOption "ignore-exports"  = return (Just OptIgnoreExports)
-parseOption "not-home"        = return (Just OptNotHome)
-parseOption "show-extensions" = return (Just OptShowExtensions)
-parseOption other = reportErrorMessage ("Unrecognised option: " <> errMsgFromString other) >> return Nothing
-
+                  Applicative.<$> processDocStringFromString dflags gre bs
 
 --------------------------------------------------------------------------------
 -- Maps
@@ -337,7 +280,7 @@ pollock_mkMaps :: DynFlags
        -> ExtractedTHDocs -- ^ Template Haskell putDoc docs
        -> ErrMsgM Pollock_Maps
 pollock_mkMaps dflags pkgName gre instances hsdecls thDocs = do
-  (a, b, c) <- unzip3 <$> traverse mappings hsdecls
+  (a, b, c) <- unzip3 Applicative.<$> traverse mappings hsdecls
   (th_a, th_b) <- thMappings
   pure ( th_a `M.union` f' (map (nubByName fst) a)
        , fmap intmap2mapint $
@@ -400,7 +343,7 @@ pollock_mkMaps dflags pkgName gre instances hsdecls thDocs = do
           subs = map (\(n, ds, im) -> (n, map hsDocString ds, fmap hsDocString im))
                   $ subordinates emptyOccEnv instanceMap decl
 
-      (subDocs, subArgs) <- unzip <$> traverse (\(_, strs, m) -> declDoc strs m) subs
+      (subDocs, subArgs) <- unzip Applicative.<$> traverse (\(_, strs, m) -> declDoc strs m) subs
 
       let
           ns = names l decl
@@ -494,7 +437,7 @@ pollock_mkExportItems
   where
     lookupExport (IEGroup _ lev docStr, _)  = liftErrMsg $ do
       doc <- processDocString dflags gre (hsDocString . unLoc $ docStr)
-      return [pollock_mkExportGroup lev "" doc]
+      return [pollock_mkExportGroup lev doc]
 
     lookupExport (IEDoc _ docStr, _)        = liftErrMsg $ do
       doc <- processDocStringParas dflags pkgName gre (hsDocString . unLoc $ docStr)
@@ -518,7 +461,7 @@ pollock_mkExportItems
       --concat <$> traverse (moduleExport thisMod dflags modMap instIfaceMap) mods
 
     lookupExport (_, avails) =
-      concat <$> traverse availExport (nubAvails avails)
+      concat Applicative.<$> traverse availExport (nubAvails avails)
 
     availExport avail =
       pollock_availExportItem is_sig thisMod semMod warnings exportedNames
@@ -768,13 +711,13 @@ pollock_fullModuleContents is_sig pkgName thisMod semMod warnings gre exportedNa
     case decl of
       (L _ (DocD _ (DocGroup lev docStr))) -> do
         doc <- liftErrMsg (processDocString dflags gre (hsDocString . unLoc $ docStr))
-        return [[pollock_mkExportGroup lev "" doc]]
+        return [[pollock_mkExportGroup lev doc]]
       (L _ (DocD _ (DocCommentNamed _ docStr))) -> do
         doc <- liftErrMsg (processDocStringParas dflags pkgName gre (hsDocString . unLoc $ docStr))
         return [[pollock_mkExportDoc doc]]
       (L _ (ValD _ valDecl))
         | name:_ <- collectHsBindBinders CollNoDictBinders valDecl
-        , Just (L _ SigD{}:_) <- filter isSigD <$> M.lookup name declMap
+        , Just (L _ SigD{}:_) <- filter isSigD Applicative.<$> M.lookup name declMap
         -> return []
       _ ->
         for (getMainDeclBinder emptyOccEnv (unLoc decl)) $ \nm -> do
@@ -843,7 +786,7 @@ extractDecl declMap name decl
         lsig <- if isDataConName name
                   then extractPatternSyn name dataNm ty_args dataCons
                   else extractRecSel name dataNm ty_args dataCons
-        pure (SigD noExtField <$> lsig)
+        pure (SigD noExtField Applicative.<$> lsig)
 
       TyClD _ FamDecl {}
         | isValName name
@@ -854,8 +797,8 @@ extractDecl declMap name decl
                                     , feqn_pats  = tys
                                     , feqn_rhs   = defn }))) ->
         if isDataConName name
-        then fmap (SigD noExtField) <$> extractPatternSyn name n tys (dd_cons defn)
-        else fmap (SigD noExtField) <$> extractRecSel name n tys (dd_cons defn)
+        then fmap (SigD noExtField) Applicative.<$> extractPatternSyn name n tys (dd_cons defn)
+        else fmap (SigD noExtField) Applicative.<$> extractRecSel name n tys (dd_cons defn)
       InstD _ (ClsInstD _ ClsInstDecl { cid_datafam_insts = insts })
         | isDataConName name ->
             let matches = [ d' | L _ d'@(DataFamInstDecl (FamEqn { feqn_rhs = dd })) <- insts
@@ -885,21 +828,21 @@ extractPatternSyn nm t tvs cons =
   case filter matches cons of
     [] -> Left . errMsgFromString . O.showSDocOneLine O.defaultSDocContext $
           O.text "constructor pattern " O.<+> O.ppr nm O.<+> O.text "not found in type" O.<+> O.ppr t
-    con:_ -> pure (extract <$> con)
+    con:_ -> pure (extract Applicative.<$> con)
  where
   matches :: LConDecl GhcRn -> Bool
-  matches (L _ con) = nm `elem` (unLoc <$> getConNames con)
+  matches (L _ con) = nm `elem` (unLoc Applicative.<$> getConNames con)
   extract :: ConDecl GhcRn -> Sig GhcRn
   extract con =
     let args =
           case con of
             ConDeclH98 { con_args = con_args' } -> case con_args' of
               PrefixCon _ args' -> map hsScaledThing args'
-              RecCon (L _ fields) -> cd_fld_type . unLoc <$> fields
+              RecCon (L _ fields) -> cd_fld_type . unLoc Applicative.<$> fields
               InfixCon arg1 arg2 -> map hsScaledThing [arg1, arg2]
             ConDeclGADT { con_g_args = con_args' } -> case con_args' of
               PrefixConGADT args' -> map hsScaledThing args'
-              RecConGADT (L _ fields) _ -> cd_fld_type . unLoc <$> fields
+              RecConGADT (L _ fields) _ -> cd_fld_type . unLoc Applicative.<$> fields
         typ = longArrow args (data_ty con)
         typ' =
           case con of

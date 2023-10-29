@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_GHC -Wwarn #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -18,24 +19,29 @@ module Haddock.Interface.LexParseRn
   , processDocStringFromString
   , processDocStringParas
   , processDocStrings
+  , processModuleHeader
   ) where
 
 import Control.Arrow
 import Control.Monad
 import Data.Foldable (traverse_)
 import Data.Functor
-import Data.List (maximumBy)
+import Data.List (maximumBy, (\\))
 import Data.Ord
 import Data.String
 
 import GHC
+import qualified GHC.Data.EnumSet as EnumSet
 import GHC.Driver.Ppr ( showPpr, showSDoc )
+import GHC.Driver.Session (languageExtensions)
+import qualified GHC.LanguageExtensions as LangExt
 import GHC.Parser.PostProcess
 import GHC.Types.Avail ( availName )
 import GHC.Types.Name
 import GHC.Types.Name.Reader
 
 import Haddock.Doc (metaDocConcat)
+import Haddock.Interface.ParseModuleHeader (parseModuleHeader)
 import Haddock.Parser as P
 import Haddock.Types
 
@@ -61,10 +67,6 @@ processDocString dflags gre =
 processDocStringFromString :: DynFlags -> GlobalRdrEnv -> String -> ErrMsgM (Doc Name)
 processDocStringFromString dflags gre =
   rename dflags gre . P.parseString dflags
-
-traverseSnd :: (Traversable t, Applicative f) => (a -> f b) -> t (x, a) -> f (t (x, b))
-traverseSnd f = traverse (\(x, a) ->
-                             (\b -> (x, b)) <$> f a)
 
 -- | Takes a 'GlobalRdrEnv' which (hopefully) contains all the
 -- definitions and a parsed comment and we attempt to make sense of
@@ -124,26 +126,12 @@ rename dflags gre = rn
           gres -> ambiguous dflags i gres
 
       DocWarning doc -> DocWarning <$> rn doc
-      DocEmphasis doc -> DocEmphasis <$> rn doc
-      DocBold doc -> DocBold <$> rn doc
-      DocMonospaced doc -> DocMonospaced <$> rn doc
-      DocUnorderedList docs -> DocUnorderedList <$> traverse rn docs
-      DocOrderedList docs -> DocOrderedList <$> traverseSnd rn docs
-      DocDefList list -> DocDefList <$> traverse (\(a, b) -> (,) <$> rn a <*> rn b) list
       DocCodeBlock doc -> DocCodeBlock <$> rn doc
       DocIdentifierUnchecked x -> pure (DocIdentifierUnchecked x)
-      DocModule (ModLink m l) -> DocModule . ModLink m <$> traverse rn l
-      DocHyperlink (Hyperlink u l) -> DocHyperlink . Hyperlink u <$> traverse rn l
-      DocPic str -> pure (DocPic str)
-      DocMathInline str -> pure (DocMathInline str)
-      DocMathDisplay str -> pure (DocMathDisplay str)
-      DocAName str -> pure (DocAName str)
       DocProperty p -> pure (DocProperty p)
       DocExamples e -> pure (DocExamples e)
       DocEmpty -> pure (DocEmpty)
       DocString str -> pure (DocString str)
-      DocHeader (Header l t) -> DocHeader . Header l <$> rn t
-      DocTable t -> DocTable <$> traverse rn t
 
 -- | Wrap an identifier that's out of scope (i.e. wasn't found in
 -- 'GlobalReaderEnv' during 'rename') in an appropriate doc. Currently
@@ -170,8 +158,7 @@ outOfScope dflags ns x =
       let a' = showWrapped (showPpr dflags) a
       reportErrorMessage $ "Warning: " <> prefix <> "'" <> fromString a' <> "' is out of scope.\n" <>
               "    If you qualify the identifier, haddock can try to link it anyway."
-      pure (monospaced a')
-    monospaced = DocMonospaced . DocString
+      pure (DocString a')
 
 -- | Handle ambiguous identifiers.
 --
@@ -212,9 +199,9 @@ ambiguous dflags x gres = do
 invalidValue :: DynFlags -> Wrap NsRdrName -> ErrMsgM (Doc a)
 invalidValue dflags x = do
   reportErrorMessage $ "Warning: " <> fromString (showNsRdrName dflags x) <> " cannot be value, yet it is"
-  reportErrorMessage $ "    namespaced as such. Did you mean to specify a type namespace"
-  reportErrorMessage $ "    instead?"
-  pure (DocMonospaced (DocString (showNsRdrName dflags x)))
+  reportErrorMessage "    namespaced as such. Did you mean to specify a type namespace"
+  reportErrorMessage "    instead?"
+  pure ((DocString (showNsRdrName dflags x)))
 
 -- | Printable representation of a wrapped and namespaced name
 showNsRdrName :: DynFlags -> Wrap NsRdrName -> String
@@ -222,3 +209,27 @@ showNsRdrName dflags = (\p i -> p ++ "'" ++ i ++ "'") <$> prefix <*> ident
   where
     ident = showWrapped (showPpr dflags . rdrName)
     prefix = renderNs . namespace . unwrap
+
+processModuleHeader :: DynFlags -> Maybe Package -> GlobalRdrEnv -> SafeHaskellMode -> Maybe HsDocString -> ErrMsgM (HaddockModInfo Name, Maybe (MDoc Name))
+processModuleHeader dflags pkgName gre safety mayStr = do
+   (hmi, doc) <-
+     case mayStr of
+       Nothing -> return failure
+       Just hds -> do
+         let str = renderHsDocString hds
+             (hmi, _) = parseModuleHeader dflags pkgName str
+         !descr <- case hmi_description hmi of
+                     Just hmi_descr -> Just <$> rename dflags gre hmi_descr
+                     Nothing        -> pure Nothing
+         let hmi' = hmi { hmi_description = descr }
+         return (hmi', Nothing)
+
+   let flags :: [LangExt.Extension]
+       -- We remove the flags implied by the language setting and we display the language instead
+       flags = EnumSet.toList (extensionFlags dflags) \\ languageExtensions (language dflags)
+   return (hmi { hmi_safety = Just $ showPpr dflags safety
+               , hmi_language = language dflags
+               , hmi_extensions = flags
+               } , doc)
+   where
+     failure = (emptyHaddockModInfo, Nothing)

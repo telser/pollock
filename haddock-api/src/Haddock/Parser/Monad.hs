@@ -31,7 +31,7 @@ import           Text.Parsec                 ( State(..)
 import qualified Text.Parsec as Parsec
 import           Text.Parsec.Pos             ( updatePosChar )
 
-import           Haddock.CompatPrelude
+import Haddock.CompatPrelude ( ($>) )
 import           Haddock.Types ( Version )
 import           Prelude hiding (takeWhile)
 
@@ -40,7 +40,7 @@ import           Prelude hiding (takeWhile)
 -- the doc even contained one.
 newtype ParserState = ParserState {
   parserStateSince :: Maybe Version
-} deriving (Eq, Show)
+}
 
 initialParserState :: ParserState
 initialParserState = ParserState Nothing
@@ -58,19 +58,6 @@ parseOnly p t = case Parsec.runParser p' initialParserState "<haddock>" t of
                   Left e -> Left (show e)
                   Right (x,s) -> Right (s,x)
   where p' = (,) <$> p <*> Parsec.getState
-
--- | Parses the given string. Returns the parsed string.
---
--- Equivalent to @Parsec.string (T.unpack t) $> t@, but more efficient.
-string :: Text -> Parser Text
-string t = do
-  s@State{ stateInput = inp, statePos = pos } <- getParserState
-  case T.stripPrefix t inp of
-    Nothing -> Parsec.parserFail "string: Failed to match the input string"
-    Just inp' ->
-      let pos' = T.foldl updatePosChar pos t
-          s' = s{ stateInput = inp', statePos = pos' }
-      in setParserState s' $> t
 
 -- | Keep matching characters as long as the predicate function holds (and
 -- return them).
@@ -108,7 +95,6 @@ scan f st = do
              case f s c of
                Nothing -> cont inp pos n   -- scan function failed
                Just s' -> go inp' s' (updatePosChar pos c) (n+1) cont
-
 
 -- | Parse a decimal number.
 decimal :: Integral a => Parser a

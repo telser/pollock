@@ -1,9 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 
------------------------------------------------------------------------------
-
------------------------------------------------------------------------------
-
 {- |
 Module      :  Haddock.Convert
 Copyright   :  (c) Isaac Dupree 2009,
@@ -22,37 +18,12 @@ module Haddock.Convert
   ) where
 
 import Data.Either (lefts, rights)
+import qualified Data.Maybe as Maybe
 
-import qualified GHC.Builtin.Names as CompatGHC
-import qualified GHC.Builtin.Types as CompatGHC
-import qualified GHC.Builtin.Types.Prim as CompatGHC
-import qualified GHC.Core.Class as CompatGHC
-import qualified GHC.Core.Coercion.Axiom as CompatGHC
-import qualified GHC.Core.ConLike as CompatGHC
-import qualified GHC.Core.DataCon as CompatGHC
-import qualified GHC.Core.PatSyn as CompatGHC
-import qualified GHC.Core.TyCo.Rep as CompatGHC
-import qualified GHC.Core.TyCon as CompatGHC
-import qualified GHC.Core.Type as CompatGHC
-import qualified GHC.Data.Bag as CompatGHC
-import qualified GHC.Hs as CompatGHC
-import qualified GHC.Types.Basic as CompatGHC
-import qualified GHC.Types.Fixity as CompatGHC
-import qualified GHC.Types.Name as CompatGHC
-import qualified GHC.Types.Name.Reader as CompatGHC
-import qualified GHC.Types.Name.Set as CompatGHC
-import qualified GHC.Types.SourceText as CompatGHC
-import qualified GHC.Types.SrcLoc as CompatGHC
-import qualified GHC.Types.TyThing as CompatGHC
-import qualified GHC.Types.Var as CompatGHC
-import qualified GHC.Types.Var.Set as CompatGHC
-import qualified GHC.Utils.Misc as CompatGHC
-import qualified GHC.Utils.Panic.Plain as CompatGHC
+import Pollock.CompatGHC as CompatGHC
 
 import Haddock.GhcUtils (defaultRuntimeRepVars, mkEmptySigType, orderedFVs)
 import Haddock.Types (ErrMsg, errMsgUnlines)
-
-import Data.Maybe (catMaybes, mapMaybe, maybeToList)
 
 {- | Whether or not to default 'CompatGHC.RuntimeRep' variables to 'CompatGHC.LiftedRep'. Check
 out Note [Defaulting RuntimeRep variables] in GHC.Iface.Type for the
@@ -111,7 +82,7 @@ tyThingToLHsDecl prr t = case t of
                   , CompatGHC.feqn_bndrs =
                       CompatGHC.HsOuterImplicit{CompatGHC.hso_ximplicit = CompatGHC.hsq_ext (CompatGHC.fdTyVars fd)}
                   , CompatGHC.feqn_pats =
-                      map (CompatGHC.HsValArg . hsLTyVarBndrToType) $
+                      fmap (CompatGHC.HsValArg . hsLTyVarBndrToType) $
                         CompatGHC.hsq_explicit $
                           CompatGHC.fdTyVars fd
                   , CompatGHC.feqn_fixity = CompatGHC.fdFixity fd
@@ -129,7 +100,7 @@ tyThingToLHsDecl prr t = case t of
               let defEqnTy = fmap (CompatGHC.noLocA . extractFamDefDecl famDecl . fst) def
               pure (CompatGHC.noLocA famDecl, defEqnTy)
 
-            atTyClDecls = map extractAtItem (CompatGHC.classATItems cl)
+            atTyClDecls = fmap extractAtItem (CompatGHC.classATItems cl)
             (atFamDecls, atDefFamDecls) = unzip (rights atTyClDecls)
             vs = CompatGHC.tyConVisibleTyVars (CompatGHC.classTyCon cl)
          in withErrs (lefts atTyClDecls) . CompatGHC.TyClD CompatGHC.noExtField $
@@ -139,23 +110,23 @@ tyThingToLHsDecl prr t = case t of
                 , CompatGHC.tcdTyVars = synifyTyVars vs
                 , CompatGHC.tcdFixity = synifyFixity cl
                 , CompatGHC.tcdFDs =
-                    map
+                    fmap
                       ( \(l, r) ->
                           CompatGHC.noLocA
                             ( CompatGHC.FunDep
                                 CompatGHC.noAnn
-                                (map (CompatGHC.noLocA . CompatGHC.getName) l)
-                                (map (CompatGHC.noLocA . CompatGHC.getName) r)
+                                (fmap (CompatGHC.noLocA . CompatGHC.getName) l)
+                                (fmap (CompatGHC.noLocA . CompatGHC.getName) r)
                             )
                       )
-                      $ snd
+                      . snd
                       $ CompatGHC.classTvsFds cl
                 , CompatGHC.tcdSigs =
                     CompatGHC.noLocA
                       ( CompatGHC.MinimalSig CompatGHC.noAnn CompatGHC.NoSourceText
                           . CompatGHC.noLocA
-                          . fmap CompatGHC.noLocA $
-                          CompatGHC.classMinimalDef cl
+                          . fmap CompatGHC.noLocA
+                          $ CompatGHC.classMinimalDef cl
                       )
                       : [ CompatGHC.noLocA tcdSig
                         | clsOp <- CompatGHC.classOpItems cl
@@ -164,7 +135,7 @@ tyThingToLHsDecl prr t = case t of
                 , CompatGHC.tcdMeths = CompatGHC.emptyBag -- ignore default method definitions, they don't affect signature
                 -- class associated-types are a subset of TyCon:
                 , CompatGHC.tcdATs = atFamDecls
-                , CompatGHC.tcdATDefs = catMaybes atDefFamDecls
+                , CompatGHC.tcdATDefs = Maybe.catMaybes atDefFamDecls
                 , CompatGHC.tcdDocs = [] -- we don't have any docs at this point
                 , CompatGHC.tcdCExt = CompatGHC.emptyNameSet
                 }
@@ -194,16 +165,16 @@ synifyAxBranch :: CompatGHC.TyCon -> CompatGHC.CoAxBranch -> CompatGHC.TyFamInst
 synifyAxBranch tc (CompatGHC.CoAxBranch{CompatGHC.cab_tvs = tkvs, CompatGHC.cab_lhs = args, CompatGHC.cab_rhs = rhs}) =
   let name = synifyNameN tc
       args_types_only = CompatGHC.filterOutInvisibleTypes tc args
-      typats = map (synifyType WithinType []) args_types_only
+      typats = fmap (synifyType WithinType []) args_types_only
       annot_typats = zipWith3 annotHsType args_poly args_types_only typats
       hs_rhs = synifyType WithinType [] rhs
-      outer_bndrs = CompatGHC.HsOuterImplicit{CompatGHC.hso_ximplicit = map CompatGHC.tyVarName tkvs}
+      outer_bndrs = CompatGHC.HsOuterImplicit{CompatGHC.hso_ximplicit = fmap CompatGHC.tyVarName tkvs}
    in -- TODO: this must change eventually
       CompatGHC.FamEqn
         { CompatGHC.feqn_ext = CompatGHC.noAnn
         , CompatGHC.feqn_tycon = name
         , CompatGHC.feqn_bndrs = outer_bndrs
-        , CompatGHC.feqn_pats = map CompatGHC.HsValArg annot_typats
+        , CompatGHC.feqn_pats = fmap CompatGHC.HsValArg annot_typats
         , CompatGHC.feqn_fixity = synifyFixity name
         , CompatGHC.feqn_rhs = hs_rhs
         }
@@ -214,13 +185,13 @@ synifyAxiom :: CompatGHC.CoAxiom br -> Either ErrMsg (CompatGHC.HsDecl CompatGHC
 synifyAxiom ax@(CompatGHC.CoAxiom{CompatGHC.co_ax_tc = tc})
   | CompatGHC.isOpenTypeFamilyTyCon tc
   , Just branch <- CompatGHC.coAxiomSingleBranch_maybe ax =
-      return $
-        CompatGHC.InstD CompatGHC.noExtField $
-          CompatGHC.TyFamInstD CompatGHC.noExtField $
-            CompatGHC.TyFamInstDecl
-              { CompatGHC.tfid_xtn = CompatGHC.noAnn
-              , CompatGHC.tfid_eqn = synifyAxBranch tc branch
-              }
+      pure
+        . CompatGHC.InstD CompatGHC.noExtField
+        . CompatGHC.TyFamInstD CompatGHC.noExtField
+        $ CompatGHC.TyFamInstDecl
+          { CompatGHC.tfid_xtn = CompatGHC.noAnn
+          , CompatGHC.tfid_eqn = synifyAxBranch tc branch
+          }
   | Just ax' <- CompatGHC.isClosedSynFamilyTyConWithAxiom_maybe tc
   , CompatGHC.getUnique ax' == CompatGHC.getUnique ax -- without the getUniques, type error
     =
@@ -238,7 +209,7 @@ synifyTyCon ::
   -> Either ErrMsg (CompatGHC.TyClDecl CompatGHC.GhcRn)
 synifyTyCon prr _coax tc
   | CompatGHC.isFunTyCon tc || CompatGHC.isPrimTyCon tc =
-      return $
+      pure $
         CompatGHC.DataDecl
           { CompatGHC.tcdLName = synifyNameN tc
           , CompatGHC.tcdTyVars =
@@ -247,7 +218,7 @@ synifyTyCon prr _coax tc
                 , CompatGHC.hsq_explicit =
                     zipWith
                       mk_hs_tv
-                      (map CompatGHC.scaledThing tyVarKinds)
+                      (fmap CompatGHC.scaledThing tyVarKinds)
                       CompatGHC.alphaTyVars -- a, b, c... which are unfortunately all kind *
                 }
           , CompatGHC.tcdFixity = synifyFixity tc
@@ -288,10 +259,10 @@ synifyTyCon _prr _coax tc
         CompatGHC.OpenSynFamilyTyCon -> mkFamDecl CompatGHC.OpenTypeFamily
         CompatGHC.ClosedSynFamilyTyCon mb
           | Just (CompatGHC.CoAxiom{CompatGHC.co_ax_branches = branches}) <- mb ->
-              mkFamDecl $
-                CompatGHC.ClosedTypeFamily $
-                  Just $
-                    map (CompatGHC.noLocA . synifyAxBranch tc) (CompatGHC.fromBranches branches)
+              mkFamDecl
+                . CompatGHC.ClosedTypeFamily
+                . Just
+                $ fmap (CompatGHC.noLocA . synifyAxBranch tc) (CompatGHC.fromBranches branches)
           | otherwise ->
               mkFamDecl $ CompatGHC.ClosedTypeFamily $ Just []
         CompatGHC.BuiltInSynFamTyCon{} ->
@@ -303,23 +274,23 @@ synifyTyCon _prr _coax tc
  where
   resultVar = CompatGHC.famTcResVar tc
   mkFamDecl i =
-    return $
-      CompatGHC.FamDecl CompatGHC.noExtField $
-        CompatGHC.FamilyDecl
-          { CompatGHC.fdExt = CompatGHC.noAnn
-          , CompatGHC.fdInfo = i
-          , CompatGHC.fdTopLevel = CompatGHC.TopLevel
-          , CompatGHC.fdLName = synifyNameN tc
-          , CompatGHC.fdTyVars = synifyTyVars (CompatGHC.tyConVisibleTyVars tc)
-          , CompatGHC.fdFixity = synifyFixity tc
-          , CompatGHC.fdResultSig =
-              synifyFamilyResultSig resultVar (CompatGHC.tyConResKind tc)
-          , CompatGHC.fdInjectivityAnn =
-              synifyInjectivityAnn
-                resultVar
-                (CompatGHC.tyConTyVars tc)
-                (CompatGHC.tyConInjectivityInfo tc)
-          }
+    pure
+      . CompatGHC.FamDecl CompatGHC.noExtField
+      $ CompatGHC.FamilyDecl
+        { CompatGHC.fdExt = CompatGHC.noAnn
+        , CompatGHC.fdInfo = i
+        , CompatGHC.fdTopLevel = CompatGHC.TopLevel
+        , CompatGHC.fdLName = synifyNameN tc
+        , CompatGHC.fdTyVars = synifyTyVars (CompatGHC.tyConVisibleTyVars tc)
+        , CompatGHC.fdFixity = synifyFixity tc
+        , CompatGHC.fdResultSig =
+            synifyFamilyResultSig resultVar (CompatGHC.tyConResKind tc)
+        , CompatGHC.fdInjectivityAnn =
+            synifyInjectivityAnn
+              resultVar
+              (CompatGHC.tyConTyVars tc)
+              (CompatGHC.tyConInjectivityInfo tc)
+        }
 synifyTyCon _prr coax tc
   | Just ty <- CompatGHC.synTyConRhs_maybe tc =
       return $
@@ -358,7 +329,7 @@ synifyTyCon _prr coax tc
         -- in prefix position), since, otherwise, the logic (at best) gets much more
         -- complicated. (would use dataConIsInfix.)
         use_gadt_syntax = CompatGHC.isGadtSyntaxTyCon tc
-        consRaw = map (synifyDataCon use_gadt_syntax) (CompatGHC.tyConDataCons tc)
+        consRaw = fmap (synifyDataCon use_gadt_syntax) (CompatGHC.tyConDataCons tc)
         cons = rights consRaw
         -- "deriving" doesn't affect the signature, no need to specify any.
         alg_deriv = []
@@ -415,8 +386,8 @@ synifyInjectivityAnn ::
 synifyInjectivityAnn Nothing _ _ = Nothing
 synifyInjectivityAnn _ _ CompatGHC.NotInjective = Nothing
 synifyInjectivityAnn (Just lhs) tvs (CompatGHC.Injective inj) =
-  let rhs = map (CompatGHC.noLocA . CompatGHC.tyVarName) (CompatGHC.filterByList inj tvs)
-   in Just $ CompatGHC.noLocA $ CompatGHC.InjectivityAnn CompatGHC.noAnn (CompatGHC.noLocA lhs) rhs
+  let rhs = fmap (CompatGHC.noLocA . CompatGHC.tyVarName) (CompatGHC.filterByList inj tvs)
+   in Just . CompatGHC.noLocA $ CompatGHC.InjectivityAnn CompatGHC.noAnn (CompatGHC.noLocA lhs) rhs
 
 synifyFamilyResultSig ::
   Maybe CompatGHC.Name -> CompatGHC.Kind -> CompatGHC.LFamilyResultSig CompatGHC.GhcRn
@@ -561,7 +532,7 @@ synifyIdSig prr s vs i = CompatGHC.TypeSig CompatGHC.noAnn [synifyNameN i] (syni
  where
   t = defaultType prr (CompatGHC.varType i)
 
-{- | Turn a 'CompatGHC.ClassOpItem' into a list of signatures. The list returned is going
+{- | TurnCompatGHC.ClassOpItemItem' into a list of signatures. The list returned is going
 to contain the synified 'CompatGHC.ClassOpSig' as well (when appropriate) a default
 'CompatGHC.ClassOpSig'.
 -}
@@ -572,11 +543,11 @@ synifyTcIdSig vs (i, dm) =
        | Just (dn, CompatGHC.GenericDM dt) <- [dm]
        ]
  where
-  mainSig t = synifySigType DeleteTopLevelQuantification vs t
-  defSig t = synifySigType ImplicitizeForAll vs t
+  mainSig = synifySigType DeleteTopLevelQuantification vs
+  defSig = synifySigType ImplicitizeForAll vs
 
 synifyCtx :: [CompatGHC.PredType] -> CompatGHC.LHsContext CompatGHC.GhcRn
-synifyCtx ts = CompatGHC.noLocA (map (synifyType WithinType []) ts)
+synifyCtx = CompatGHC.noLocA . map (synifyType WithinType [])
 
 synifyTyVars :: [CompatGHC.TyVar] -> CompatGHC.LHsQTyVars CompatGHC.GhcRn
 synifyTyVars ktvs =
@@ -872,7 +843,7 @@ synifyVisForAllType vs ty =
           , CompatGHC.hst_body = synifyType WithinType (tvs' ++ vs) rho
           }
 
-{- | Process a 'CompatGHC.Type' which starts with an invisible @forall@ or a constraint
+{- | ProcessCompatGHC.TypeType' which starts with an invisible @forall@ or a constraint
 into an 'CompatGHC.HsType'
 -}
 synifySigmaType ::
@@ -1009,7 +980,7 @@ synifyMult vs t = case t of
 synifyPatSynType :: CompatGHC.PatSyn -> CompatGHC.LHsType CompatGHC.GhcRn
 synifyPatSynType ps =
   let (univ_tvs, req_theta, ex_tvs, prov_theta, arg_tys, res_ty) = CompatGHC.patSynSigBndr ps
-      ts = maybeToList (CompatGHC.tyConAppTyCon_maybe res_ty)
+      ts = Maybe.maybeToList (CompatGHC.tyConAppTyCon_maybe res_ty)
 
       -- HACK: a HsQualTy with theta = [unitTy] will be printed as "() =>",
       -- i.e., an explicit empty context, which is what we need. This is not
@@ -1033,7 +1004,7 @@ synifyTyLit (CompatGHC.StrTyLit s) = CompatGHC.HsStrTy CompatGHC.NoSourceText s
 synifyTyLit (CompatGHC.CharTyLit c) = CompatGHC.HsCharTy CompatGHC.NoSourceText c
 
 synifyKindSig :: CompatGHC.Kind -> CompatGHC.LHsKind CompatGHC.GhcRn
-synifyKindSig k = synifyType WithinType [] k
+synifyKindSig = synifyType WithinType []
 
 stripKindSig :: CompatGHC.LHsType CompatGHC.GhcRn -> CompatGHC.LHsType CompatGHC.GhcRn
 stripKindSig (CompatGHC.L _ (CompatGHC.HsKindSig _ t _)) = t
@@ -1078,7 +1049,7 @@ tcSplitSomeForAllTysPreserveSynonyms argf_pred ty = split ty ty []
 tcSplitForAllTysReqPreserveSynonyms :: CompatGHC.Type -> ([CompatGHC.ReqTVBinder], CompatGHC.Type)
 tcSplitForAllTysReqPreserveSynonyms ty =
   let (all_bndrs, body) = tcSplitSomeForAllTysPreserveSynonyms CompatGHC.isVisibleArgFlag ty
-      req_bndrs = mapMaybe mk_req_bndr_maybe all_bndrs
+      req_bndrs = Maybe.mapMaybe mk_req_bndr_maybe all_bndrs
    in CompatGHC.assert
         (req_bndrs `CompatGHC.equalLength` all_bndrs)
         (req_bndrs, body)
@@ -1093,7 +1064,7 @@ tcSplitForAllTysInvisPreserveSynonyms ::
   CompatGHC.Type -> ([CompatGHC.InvisTVBinder], CompatGHC.Type)
 tcSplitForAllTysInvisPreserveSynonyms ty =
   let (all_bndrs, body) = tcSplitSomeForAllTysPreserveSynonyms CompatGHC.isInvisibleArgFlag ty
-      inv_bndrs = mapMaybe mk_inv_bndr_maybe all_bndrs
+      inv_bndrs = Maybe.mapMaybe mk_inv_bndr_maybe all_bndrs
    in CompatGHC.assert
         (inv_bndrs `CompatGHC.equalLength` all_bndrs)
         (inv_bndrs, body)

@@ -26,10 +26,11 @@ library
   default-language: Haskell2010
 
   -- this package typically supports only single major versions
-  build-depends: base            ^>= 4.16.0
-               , ghc             ^>= 9.4
-               , parsec       ^>= 3.1.13.0
-               , text            ^>= 2.0
+  build-depends: base            >= 4.16.0 && <5
+               , ghc             >= 9.4 && <9.9
+               , text            >= 2.0 && <2.2
+               -- 0.14.4 fixes segfaults with text 2.0
+               , attoparsec     >= 0.14.4 && <0.15
 
   -- Versions for the dependencies below are transitively pinned by
   -- the non-reinstallable `ghc` package and hence need no version
@@ -56,21 +57,16 @@ library
 
 
   exposed-modules:
-    Haddock.Interface.Coverage
+    Pollock
 
   other-modules:
-    CompatGHC
-    Haddock.CompatPrelude
+    Pollock.CompatGHC
     Haddock.Convert
     Haddock.Doc
     Haddock.GhcUtils
     Haddock.Interface.LexParseRn
     Haddock.Interface.ParseModuleHeader
-    Haddock.Options
-    Haddock.Parser
-    Haddock.Parser.Identifier
     Haddock.Parser.Monad
-    Haddock.Parser.Util
     Haddock.Types
     Paths_haddock_api
 

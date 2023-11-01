@@ -5,11 +5,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# OPTIONS_HADDOCK hide #-}
-
------------------------------------------------------------------------------
-
------------------------------------------------------------------------------
 
 {- |
 Module      :  Haddock.GhcUtils
@@ -24,154 +19,132 @@ Utils for dealing with types from the GHC API
 -}
 module Haddock.GhcUtils where
 
-import Control.Arrow
-import Data.Maybe (mapMaybe)
+import qualified Data.Maybe as Maybe
 
-import GHC
-import GHC.Builtin.Types (liftedRepTy)
-import GHC.Core.TyCo.Rep (Type (..))
-import GHC.Core.Type (isRuntimeRepVar)
-import GHC.Driver.Ppr (showPpr)
-import GHC.Types.Basic
-import GHC.Types.Name
-import GHC.Types.Var
-  ( TyVarBinder
-  , VarBndr (..)
-  , isInvisibleArgFlag
-  , tyVarKind
-  , updateTyVarKind
-  )
-import GHC.Types.Var.Env (TyVarEnv, elemVarEnv, emptyVarEnv, extendVarEnv)
-import GHC.Types.Var.Set (VarSet, emptyVarSet)
-import GHC.Unit.Module
-import GHC.Utils.FV as FV
-import GHC.Utils.Outputable (Outputable)
-
-import GHC.HsToCore.Docs
-
-moduleString :: Module -> String
-moduleString = moduleNameString . moduleName
+import qualified Pollock.CompatGHC as CompatGHC
 
 -- Useful when there is a signature with multiple names, e.g.
 --   foo, bar :: Types..
 -- but only one of the names is exported and we have to change the
 -- type signature to only include the exported names.
-filterLSigNames :: (IdP (GhcPass p) -> Bool) -> LSig (GhcPass p) -> Maybe (LSig (GhcPass p))
-filterLSigNames p (L loc sig) = L loc <$> (filterSigNames p sig)
+filterLSigNames ::
+  (CompatGHC.IdP (CompatGHC.GhcPass p) -> Bool) -> CompatGHC.LSig (CompatGHC.GhcPass p) -> Maybe (CompatGHC.LSig (CompatGHC.GhcPass p))
+filterLSigNames p (CompatGHC.L loc sig) = CompatGHC.L loc <$> (filterSigNames p sig)
 
-filterSigNames :: (IdP (GhcPass p) -> Bool) -> Sig (GhcPass p) -> Maybe (Sig (GhcPass p))
-filterSigNames p orig@(SpecSig _ n _ _) = ifTrueJust (p $ unLoc n) orig
-filterSigNames p orig@(InlineSig _ n _) = ifTrueJust (p $ unLoc n) orig
-filterSigNames p (FixSig _ (FixitySig _ ns ty)) =
-  case filter (p . unLoc) ns of
+filterSigNames :: (CompatGHC.IdP (CompatGHC.GhcPass p) -> Bool) -> CompatGHC.Sig (CompatGHC.GhcPass p) -> Maybe (CompatGHC.Sig (CompatGHC.GhcPass p))
+filterSigNames p orig@(CompatGHC.SpecSig _ n _ _) = ifTrueJust (p $ CompatGHC.unLoc n) orig
+filterSigNames p orig@(CompatGHC.InlineSig _ n _) = ifTrueJust (p $ CompatGHC.unLoc n) orig
+filterSigNames p (CompatGHC.FixSig _ (CompatGHC.FixitySig _ ns ty)) =
+  case filter (p . CompatGHC.unLoc) ns of
     [] -> Nothing
-    filtered -> Just (FixSig noAnn (FixitySig noExtField filtered ty))
-filterSigNames _ orig@(MinimalSig _ _ _) = Just orig
-filterSigNames p (TypeSig _ ns ty) =
-  case filter (p . unLoc) ns of
+    filtered -> Just (CompatGHC.FixSig CompatGHC.noAnn (CompatGHC.FixitySig CompatGHC.noExtField filtered ty))
+filterSigNames _ orig@(CompatGHC.MinimalSig _ _ _) = Just orig
+filterSigNames p (CompatGHC.TypeSig _ ns ty) =
+  case filter (p . CompatGHC.unLoc) ns of
     [] -> Nothing
-    filtered -> Just (TypeSig noAnn filtered ty)
-filterSigNames p (ClassOpSig _ is_default ns ty) =
-  case filter (p . unLoc) ns of
+    filtered -> Just (CompatGHC.TypeSig CompatGHC.noAnn filtered ty)
+filterSigNames p (CompatGHC.ClassOpSig _ is_default ns ty) =
+  case filter (p . CompatGHC.unLoc) ns of
     [] -> Nothing
-    filtered -> Just (ClassOpSig noAnn is_default filtered ty)
-filterSigNames p (PatSynSig _ ns ty) =
-  case filter (p . unLoc) ns of
+    filtered -> Just (CompatGHC.ClassOpSig CompatGHC.noAnn is_default filtered ty)
+filterSigNames p (CompatGHC.PatSynSig _ ns ty) =
+  case filter (p . CompatGHC.unLoc) ns of
     [] -> Nothing
-    filtered -> Just (PatSynSig noAnn filtered ty)
+    filtered -> Just (CompatGHC.PatSynSig CompatGHC.noAnn filtered ty)
 filterSigNames _ _ = Nothing
 
 ifTrueJust :: Bool -> name -> Maybe name
 ifTrueJust True = Just
 ifTrueJust False = const Nothing
 
-sigName :: LSig GhcRn -> [IdP GhcRn]
-sigName (L _ sig) = sigNameNoLoc emptyOccEnv sig
+sigName :: CompatGHC.LSig CompatGHC.GhcRn -> [CompatGHC.IdP CompatGHC.GhcRn]
+sigName (CompatGHC.L _ sig) = CompatGHC.sigNameNoLoc CompatGHC.emptyOccEnv sig
 
-pretty :: (Outputable a) => DynFlags -> a -> String
-pretty = showPpr
+pretty :: (CompatGHC.Outputable a) => CompatGHC.DynFlags -> a -> String
+pretty = CompatGHC.showPpr
 
 -- ---------------------------------------------------------------------
 
 -- These functions are duplicated from the GHC API, as they must be
 -- instantiated at DocNameI instead of (GhcPass _).
 
-mkEmptySigType :: LHsType GhcRn -> LHsSigType GhcRn
+mkEmptySigType :: CompatGHC.LHsType CompatGHC.GhcRn -> CompatGHC.LHsSigType CompatGHC.GhcRn
 -- Dubious, because the implicit binders are empty even
 -- though the type might have free variables
-mkEmptySigType lty@(L loc ty) = L loc $ case ty of
-  HsForAllTy
-    { hst_tele = HsForAllInvis{hsf_invis_bndrs = bndrs}
-    , hst_body = body
+mkEmptySigType lty@(CompatGHC.L loc ty) = CompatGHC.L loc $ case ty of
+  CompatGHC.HsForAllTy
+    { CompatGHC.hst_tele = CompatGHC.HsForAllInvis{CompatGHC.hsf_invis_bndrs = bndrs}
+    , CompatGHC.hst_body = body
     } ->
-      HsSig
-        { sig_ext = noExtField
-        , sig_bndrs =
-            HsOuterExplicit
-              { hso_xexplicit = noExtField
-              , hso_bndrs = bndrs
+      CompatGHC.HsSig
+        { CompatGHC.sig_ext = CompatGHC.noExtField
+        , CompatGHC.sig_bndrs =
+            CompatGHC.HsOuterExplicit
+              { CompatGHC.hso_xexplicit = CompatGHC.noExtField
+              , CompatGHC.hso_bndrs = bndrs
               }
-        , sig_body = body
+        , CompatGHC.sig_body = body
         }
   _ ->
-    HsSig
-      { sig_ext = noExtField
-      , sig_bndrs = HsOuterImplicit{hso_ximplicit = []}
-      , sig_body = lty
+    CompatGHC.HsSig
+      { CompatGHC.sig_ext = CompatGHC.noExtField
+      , CompatGHC.sig_bndrs = CompatGHC.HsOuterImplicit{CompatGHC.hso_ximplicit = []}
+      , CompatGHC.sig_body = lty
       }
 
-addClassContext :: Name -> LHsQTyVars GhcRn -> LSig GhcRn -> LSig GhcRn
+addClassContext ::
+  CompatGHC.Name -> CompatGHC.LHsQTyVars CompatGHC.GhcRn -> CompatGHC.LSig CompatGHC.GhcRn -> CompatGHC.LSig CompatGHC.GhcRn
 -- Add the class context to a class-op signature
-addClassContext cls tvs0 (L pos (ClassOpSig _ _ lname ltype)) =
-  L pos (TypeSig noAnn lname (mkEmptyWildCardBndrs (go_sig_ty ltype)))
+addClassContext cls tvs0 (CompatGHC.L pos (CompatGHC.ClassOpSig _ _ lname ltype)) =
+  CompatGHC.L pos (CompatGHC.TypeSig CompatGHC.noAnn lname (CompatGHC.mkEmptyWildCardBndrs (go_sig_ty ltype)))
  where
-  go_sig_ty (L loc (HsSig{sig_bndrs = bndrs, sig_body = ty})) =
-    L
+  go_sig_ty (CompatGHC.L loc (CompatGHC.HsSig{CompatGHC.sig_bndrs = bndrs, CompatGHC.sig_body = ty})) =
+    CompatGHC.L
       loc
-      ( HsSig
-          { sig_ext = noExtField
-          , sig_bndrs = bndrs
-          , sig_body = go_ty ty
+      ( CompatGHC.HsSig
+          { CompatGHC.sig_ext = CompatGHC.noExtField
+          , CompatGHC.sig_bndrs = bndrs
+          , CompatGHC.sig_body = go_ty ty
           }
       )
 
-  go_ty (L loc (HsForAllTy{hst_tele = tele, hst_body = ty})) =
-    L
+  go_ty (CompatGHC.L loc (CompatGHC.HsForAllTy{CompatGHC.hst_tele = tele, CompatGHC.hst_body = ty})) =
+    CompatGHC.L
       loc
-      ( HsForAllTy
-          { hst_xforall = noExtField
-          , hst_tele = tele
-          , hst_body = go_ty ty
+      ( CompatGHC.HsForAllTy
+          { CompatGHC.hst_xforall = CompatGHC.noExtField
+          , CompatGHC.hst_tele = tele
+          , CompatGHC.hst_body = go_ty ty
           }
       )
-  go_ty (L loc (HsQualTy{hst_ctxt = ctxt, hst_body = ty})) =
-    L
+  go_ty (CompatGHC.L loc (CompatGHC.HsQualTy{CompatGHC.hst_ctxt = ctxt, CompatGHC.hst_body = ty})) =
+    CompatGHC.L
       loc
-      ( HsQualTy
-          { hst_xqual = noExtField
-          , hst_ctxt = add_ctxt ctxt
-          , hst_body = ty
+      ( CompatGHC.HsQualTy
+          { CompatGHC.hst_xqual = CompatGHC.noExtField
+          , CompatGHC.hst_ctxt = add_ctxt ctxt
+          , CompatGHC.hst_body = ty
           }
       )
-  go_ty (L loc ty) =
-    L
+  go_ty (CompatGHC.L loc ty) =
+    CompatGHC.L
       loc
-      ( HsQualTy
-          { hst_xqual = noExtField
-          , hst_ctxt = add_ctxt (noLocA [])
-          , hst_body = L loc ty
+      ( CompatGHC.HsQualTy
+          { CompatGHC.hst_xqual = CompatGHC.noExtField
+          , CompatGHC.hst_ctxt = add_ctxt (CompatGHC.noLocA [])
+          , CompatGHC.hst_body = CompatGHC.L loc ty
           }
       )
 
-  extra_pred = nlHsTyConApp NotPromoted Prefix cls (lHsQTyVarsToTypes tvs0)
+  extra_pred = CompatGHC.nlHsTyConApp CompatGHC.NotPromoted CompatGHC.Prefix cls (lHsQTyVarsToTypes tvs0)
 
-  add_ctxt (L loc preds) = L loc (extra_pred : preds)
+  add_ctxt (CompatGHC.L loc preds) = CompatGHC.L loc (extra_pred : preds)
 addClassContext _ _ sig = sig -- E.g. a MinimalSig is fine
 
-lHsQTyVarsToTypes :: LHsQTyVars GhcRn -> [LHsTypeArg GhcRn]
+lHsQTyVarsToTypes :: CompatGHC.LHsQTyVars CompatGHC.GhcRn -> [CompatGHC.LHsTypeArg CompatGHC.GhcRn]
 lHsQTyVarsToTypes tvs =
-  [ HsValArg $ noLocA (HsTyVar noAnn NotPromoted (noLocA (hsLTyVarName tv)))
-  | tv <- hsQTvExplicit tvs
+  [ CompatGHC.HsValArg $ CompatGHC.noLocA (CompatGHC.HsTyVar CompatGHC.noAnn CompatGHC.NotPromoted (CompatGHC.noLocA (CompatGHC.hsLTyVarName tv)))
+  | tv <- CompatGHC.hsQTvExplicit tvs
   ]
 
 --------------------------------------------------------------------------------
@@ -180,158 +153,90 @@ lHsQTyVarsToTypes tvs =
 
 --------------------------------------------------------------------------------
 
-restrictTo :: [Name] -> LHsDecl GhcRn -> LHsDecl GhcRn
-restrictTo names (L loc decl) = L loc $ case decl of
-  TyClD x d
-    | isDataDecl d ->
-        TyClD x (d{tcdDataDefn = restrictDataDefn names (tcdDataDefn d)})
-  TyClD x d
-    | isClassDecl d ->
-        TyClD
+restrictTo ::
+  [CompatGHC.Name] -> CompatGHC.LHsDecl CompatGHC.GhcRn -> CompatGHC.LHsDecl CompatGHC.GhcRn
+restrictTo names (CompatGHC.L loc decl) = CompatGHC.L loc $ case decl of
+  CompatGHC.TyClD x d
+    | CompatGHC.isDataDecl d ->
+        CompatGHC.TyClD x (d{CompatGHC.tcdDataDefn = restrictDataDefn names (CompatGHC.tcdDataDefn d)})
+  CompatGHC.TyClD x d
+    | CompatGHC.isClassDecl d ->
+        CompatGHC.TyClD
           x
           ( d
-              { tcdSigs = restrictDecls names (tcdSigs d)
-              , tcdATs = restrictATs names (tcdATs d)
+              { CompatGHC.tcdSigs = restrictDecls names (CompatGHC.tcdSigs d)
+              , CompatGHC.tcdATs = restrictATs names (CompatGHC.tcdATs d)
               }
           )
   _ -> decl
 
-restrictDataDefn :: [Name] -> HsDataDefn GhcRn -> HsDataDefn GhcRn
-restrictDataDefn names defn@(HsDataDefn{dd_ND = new_or_data, dd_cons = cons})
-  | DataType <- new_or_data =
-      defn{dd_cons = restrictCons names cons}
+restrictDataDefn :: [CompatGHC.Name] -> CompatGHC.HsDataDefn CompatGHC.GhcRn -> CompatGHC.HsDataDefn CompatGHC.GhcRn
+restrictDataDefn names defn@(CompatGHC.HsDataDefn{CompatGHC.dd_ND = new_or_data, CompatGHC.dd_cons = cons})
+  | CompatGHC.DataType <- new_or_data =
+      defn{CompatGHC.dd_cons = restrictCons names cons}
   | otherwise -- Newtype
     =
       case restrictCons names cons of
-        [] -> defn{dd_ND = DataType, dd_cons = []}
-        [con] -> defn{dd_cons = [con]}
+        [] -> defn{CompatGHC.dd_ND = CompatGHC.DataType, CompatGHC.dd_cons = []}
+        [con] -> defn{CompatGHC.dd_cons = [con]}
         _ -> error "Should not happen"
 
-restrictCons :: [Name] -> [LConDecl GhcRn] -> [LConDecl GhcRn]
-restrictCons names decls = [L p d | L p (Just d) <- map (fmap keep) decls]
+restrictCons :: [CompatGHC.Name] -> [CompatGHC.LConDecl CompatGHC.GhcRn] -> [CompatGHC.LConDecl CompatGHC.GhcRn]
+restrictCons names decls = [CompatGHC.L p d | CompatGHC.L p (Just d) <- map (fmap keep) decls]
  where
-  keep :: ConDecl GhcRn -> Maybe (ConDecl GhcRn)
+  keep :: CompatGHC.ConDecl CompatGHC.GhcRn -> Maybe (CompatGHC.ConDecl CompatGHC.GhcRn)
   keep d
-    | any (\n -> n `elem` names) (map unLoc $ getConNames d) =
+    | any ((\n -> n `elem` names) . CompatGHC.unLoc) (CompatGHC.getConNames d) =
         case d of
-          ConDeclH98{con_args = con_args'} -> case con_args' of
-            PrefixCon{} -> Just d
-            RecCon fields
-              | all field_avail (unLoc fields) -> Just d
-              | otherwise -> Just (d{con_args = PrefixCon [] (field_types $ unLoc fields)})
+          CompatGHC.ConDeclH98{CompatGHC.con_args = con_args'} -> case con_args' of
+            CompatGHC.PrefixCon{} -> Just d
+            CompatGHC.RecCon fields
+              | all field_avail (CompatGHC.unLoc fields) -> Just d
+              | otherwise -> Just (d{CompatGHC.con_args = CompatGHC.PrefixCon [] (field_types $ CompatGHC.unLoc fields)})
             -- if we have *all* the field names available, then
             -- keep the record declaration.  Otherwise degrade to
             -- a constructor declaration.  This isn't quite right, but
             -- it's the best we can do.
-            InfixCon _ _ -> Just d
-          ConDeclGADT{con_g_args = con_args'} -> case con_args' of
-            PrefixConGADT{} -> Just d
-            RecConGADT fields _
-              | all field_avail (unLoc fields) -> Just d
-              | otherwise -> Just (d{con_g_args = PrefixConGADT (field_types $ unLoc fields)})
+            CompatGHC.InfixCon _ _ -> Just d
+          CompatGHC.ConDeclGADT{CompatGHC.con_g_args = con_args'} -> case con_args' of
+            CompatGHC.PrefixConGADT{} -> Just d
+            CompatGHC.RecConGADT fields _
+              | all field_avail (CompatGHC.unLoc fields) -> Just d
+              | otherwise -> Just (d{CompatGHC.con_g_args = CompatGHC.PrefixConGADT (field_types $ CompatGHC.unLoc fields)})
    where
     -- see above
 
-    field_avail :: LConDeclField GhcRn -> Bool
-    field_avail (L _ (ConDeclField _ fs _ _)) =
-      all (\f -> foExt (unLoc f) `elem` names) fs
+    field_avail :: CompatGHC.LConDeclField CompatGHC.GhcRn -> Bool
+    field_avail (CompatGHC.L _ (CompatGHC.ConDeclField _ fs _ _)) =
+      all (\f -> CompatGHC.foExt (CompatGHC.unLoc f) `elem` names) fs
 
-    field_types flds = [hsUnrestricted t | L _ (ConDeclField _ _ t _) <- flds]
+    field_types flds = [CompatGHC.hsUnrestricted t | CompatGHC.L _ (CompatGHC.ConDeclField _ _ t _) <- flds]
   keep _ = Nothing
 
-restrictDecls :: [Name] -> [LSig GhcRn] -> [LSig GhcRn]
-restrictDecls names = mapMaybe (filterLSigNames (`elem` names))
+restrictDecls :: [CompatGHC.Name] -> [CompatGHC.LSig CompatGHC.GhcRn] -> [CompatGHC.LSig CompatGHC.GhcRn]
+restrictDecls names = Maybe.mapMaybe (filterLSigNames (`elem` names))
 
-restrictATs :: [Name] -> [LFamilyDecl GhcRn] -> [LFamilyDecl GhcRn]
-restrictATs names ats = [at | at <- ats, unLoc (fdLName (unLoc at)) `elem` names]
-
--------------------------------------------------------------------------------
-
--- * Located
+restrictATs :: [CompatGHC.Name] -> [CompatGHC.LFamilyDecl CompatGHC.GhcRn] -> [CompatGHC.LFamilyDecl CompatGHC.GhcRn]
+restrictATs names ats = [at | at <- ats, CompatGHC.unLoc (CompatGHC.fdLName (CompatGHC.unLoc at)) `elem` names]
 
 -------------------------------------------------------------------------------
 
-unL :: GenLocated l a -> a
-unL (L _ x) = x
+-- * Free variables of a 'CompatGHC.Type'
 
 -------------------------------------------------------------------------------
 
--- * NamedThing instances
-
--------------------------------------------------------------------------------
-
-instance NamedThing (TyClDecl GhcRn) where
-  getName = tcdName
-
--------------------------------------------------------------------------------
-
--- * Subordinates
-
--------------------------------------------------------------------------------
-
-class Parent a where
-  children :: a -> [Name]
-
-instance Parent (ConDecl GhcRn) where
-  children con =
-    case getRecConArgs_maybe con of
-      Nothing -> []
-      Just flds -> map (foExt . unLoc) $ concatMap (cd_fld_names . unLoc) (unLoc flds)
-
-instance Parent (TyClDecl GhcRn) where
-  children d
-    | isDataDecl d =
-        map unLoc $
-          concatMap (getConNames . unLoc) $
-            (dd_cons . tcdDataDefn) d
-    | isClassDecl d =
-        map (unLoc . fdLName . unLoc) (tcdATs d)
-          ++ [unLoc n | L _ (TypeSig _ ns _) <- tcdSigs d, n <- ns]
-    | otherwise = []
-
--- | A parent and its children
-family :: (NamedThing a, Parent a) => a -> (Name, [Name])
-family = getName &&& children
-
-familyConDecl :: ConDecl GHC.GhcRn -> [(Name, [Name])]
-familyConDecl d = zip (map unLoc (getConNames d)) (repeat $ children d)
-
-{- | A mapping from the parent (main-binder) to its children and from each
-child to its grand-children, recursively.
--}
-families :: TyClDecl GhcRn -> [(Name, [Name])]
-families d
-  | isDataDecl d = family d : concatMap (familyConDecl . unLoc) (dd_cons (tcdDataDefn d))
-  | isClassDecl d = [family d]
-  | otherwise = []
-
--- | A mapping from child to parent
-parentMap :: TyClDecl GhcRn -> [(Name, Name)]
-parentMap d = [(c, p) | (p, cs) <- families d, c <- cs]
-
--- | The parents of a subordinate in a declaration
-parents :: Name -> HsDecl GhcRn -> [Name]
-parents n (TyClD _ d) = [p | (c, p) <- parentMap d, c == n]
-parents _ _ = []
-
--------------------------------------------------------------------------------
-
--- * Free variables of a 'Type'
-
--------------------------------------------------------------------------------
-
-{- | Get free type variables in a 'Type' in their order of appearance.
+{- | Get free type variables inCompatGHC.TypeType' in their order of appearance.
 See [Ordering of implicit variables].
 -}
 orderedFVs ::
-  VarSet
+  CompatGHC.VarSet
   -- ^ free variables to ignore
-  -> [Type]
+  -> [CompatGHC.Type]
   -- ^ types to traverse (in order) looking for free variables
-  -> [TyVar]
+  -> [CompatGHC.TyVar]
   -- ^ free type variables, in the order they appear in
 orderedFVs vs tys =
-  reverse . fst $ tyCoFVsOfTypes' tys (const True) vs ([], emptyVarSet)
+  reverse . fst $ tyCoFVsOfTypes' tys (const True) vs ([], CompatGHC.emptyVarSet)
 
 -- See the "Free variables of types and coercions" section in 'TyCoRep', or
 -- check out Note [Free variables of types]. The functions in this section
@@ -358,35 +263,35 @@ orderedFVs vs tys =
 {- | Just like 'tyCoFVsOfType', but traverses type variables in reverse order
 of  appearance.
 -}
-tyCoFVsOfType' :: Type -> FV
-tyCoFVsOfType' (TyVarTy v) a b c = (FV.unitFV v `unionFV` tyCoFVsOfType' (tyVarKind v)) a b c
-tyCoFVsOfType' (TyConApp _ tys) a b c = tyCoFVsOfTypes' tys a b c
-tyCoFVsOfType' (LitTy{}) a b c = emptyFV a b c
-tyCoFVsOfType' (AppTy fun arg) a b c = (tyCoFVsOfType' arg `unionFV` tyCoFVsOfType' fun) a b c
-tyCoFVsOfType' (FunTy _ w arg res) a b c =
+tyCoFVsOfType' :: CompatGHC.Type -> CompatGHC.FV
+tyCoFVsOfType' (CompatGHC.TyVarTy v) a b c = (CompatGHC.unitFV v `CompatGHC.unionFV` tyCoFVsOfType' (CompatGHC.tyVarKind v)) a b c
+tyCoFVsOfType' (CompatGHC.TyConApp _ tys) a b c = tyCoFVsOfTypes' tys a b c
+tyCoFVsOfType' (CompatGHC.LitTy{}) a b c = CompatGHC.emptyFV a b c
+tyCoFVsOfType' (CompatGHC.AppTy fun arg) a b c = (tyCoFVsOfType' arg `CompatGHC.unionFV` tyCoFVsOfType' fun) a b c
+tyCoFVsOfType' (CompatGHC.FunTy _ w arg res) a b c =
   ( tyCoFVsOfType' w
-      `unionFV` tyCoFVsOfType' res
-      `unionFV` tyCoFVsOfType' arg
+      `CompatGHC.unionFV` tyCoFVsOfType' res
+      `CompatGHC.unionFV` tyCoFVsOfType' arg
   )
     a
     b
     c
-tyCoFVsOfType' (ForAllTy bndr ty) a b c = tyCoFVsBndr' bndr (tyCoFVsOfType' ty) a b c
-tyCoFVsOfType' (CastTy ty _) a b c = (tyCoFVsOfType' ty) a b c
-tyCoFVsOfType' (CoercionTy _) a b c = emptyFV a b c
+tyCoFVsOfType' (CompatGHC.ForAllTy bndr ty) a b c = tyCoFVsBndr' bndr (tyCoFVsOfType' ty) a b c
+tyCoFVsOfType' (CompatGHC.CastTy ty _) a b c = (tyCoFVsOfType' ty) a b c
+tyCoFVsOfType' (CompatGHC.CoercionTy _) a b c = CompatGHC.emptyFV a b c
 
 {- | Just like 'tyCoFVsOfTypes', but traverses type variables in reverse order
 of appearance.
 -}
-tyCoFVsOfTypes' :: [Type] -> FV
-tyCoFVsOfTypes' (ty : tys) fv_cand in_scope acc = (tyCoFVsOfTypes' tys `unionFV` tyCoFVsOfType' ty) fv_cand in_scope acc
-tyCoFVsOfTypes' [] fv_cand in_scope acc = emptyFV fv_cand in_scope acc
+tyCoFVsOfTypes' :: [CompatGHC.Type] -> CompatGHC.FV
+tyCoFVsOfTypes' (ty : tys) fv_cand in_scope acc = (tyCoFVsOfTypes' tys `CompatGHC.unionFV` tyCoFVsOfType' ty) fv_cand in_scope acc
+tyCoFVsOfTypes' [] fv_cand in_scope acc = CompatGHC.emptyFV fv_cand in_scope acc
 
 {- | Just like 'tyCoFVsBndr', but traverses type variables in reverse order of
 appearance.
 -}
-tyCoFVsBndr' :: TyVarBinder -> FV -> FV
-tyCoFVsBndr' (Bndr tv _) fvs = FV.delFV tv fvs `unionFV` tyCoFVsOfType' (tyVarKind tv)
+tyCoFVsBndr' :: CompatGHC.TyVarBinder -> CompatGHC.FV -> CompatGHC.FV
+tyCoFVsBndr' (CompatGHC.Bndr tv _) fvs = CompatGHC.delFV tv fvs `CompatGHC.unionFV` tyCoFVsOfType' (CompatGHC.tyVarKind tv)
 
 -------------------------------------------------------------------------------
 
@@ -398,31 +303,31 @@ tyCoFVsBndr' (Bndr tv _) fvs = FV.delFV tv fvs `unionFV` tyCoFVsOfType' (tyVarKi
 'LiftedType'. See 'defaultRuntimeRepVars' in GHC.Iface.Type the original such
 function working over `IfaceType`'s.
 -}
-defaultRuntimeRepVars :: Type -> Type
-defaultRuntimeRepVars = go emptyVarEnv
+defaultRuntimeRepVars :: CompatGHC.Type -> CompatGHC.Type
+defaultRuntimeRepVars = go CompatGHC.emptyVarEnv
  where
-  go :: TyVarEnv () -> Type -> Type
-  go subs (ForAllTy (Bndr var flg) ty)
-    | isRuntimeRepVar var
-    , isInvisibleArgFlag flg =
-        let subs' = extendVarEnv subs var ()
+  go :: CompatGHC.TyVarEnv () -> CompatGHC.Type -> CompatGHC.Type
+  go subs (CompatGHC.ForAllTy (CompatGHC.Bndr var flg) ty)
+    | CompatGHC.isRuntimeRepVar var
+    , CompatGHC.isInvisibleArgFlag flg =
+        let subs' = CompatGHC.extendVarEnv subs var ()
          in go subs' ty
     | otherwise =
-        ForAllTy
-          (Bndr (updateTyVarKind (go subs) var) flg)
+        CompatGHC.ForAllTy
+          (CompatGHC.Bndr (CompatGHC.updateTyVarKind (go subs) var) flg)
           (go subs ty)
-  go subs (TyVarTy tv)
-    | tv `elemVarEnv` subs =
-        liftedRepTy
+  go subs (CompatGHC.TyVarTy tv)
+    | tv `CompatGHC.elemVarEnv` subs =
+        CompatGHC.liftedRepTy
     | otherwise =
-        TyVarTy (updateTyVarKind (go subs) tv)
-  go subs (TyConApp tc tc_args) =
-    TyConApp tc (map (go subs) tc_args)
-  go subs (FunTy af w arg res) =
-    FunTy af (go subs w) (go subs arg) (go subs res)
-  go subs (AppTy t u) =
-    AppTy (go subs t) (go subs u)
-  go subs (CastTy x co) =
-    CastTy (go subs x) co
-  go _ ty@(LitTy{}) = ty
-  go _ ty@(CoercionTy{}) = ty
+        CompatGHC.TyVarTy (CompatGHC.updateTyVarKind (go subs) tv)
+  go subs (CompatGHC.TyConApp tc tc_args) =
+    CompatGHC.TyConApp tc (map (go subs) tc_args)
+  go subs (CompatGHC.FunTy af w arg res) =
+    CompatGHC.FunTy af (go subs w) (go subs arg) (go subs res)
+  go subs (CompatGHC.AppTy t u) =
+    CompatGHC.AppTy (go subs t) (go subs u)
+  go subs (CompatGHC.CastTy x co) =
+    CompatGHC.CastTy (go subs x) co
+  go _ ty@(CompatGHC.LitTy{}) = ty
+  go _ ty@(CompatGHC.CoercionTy{}) = ty

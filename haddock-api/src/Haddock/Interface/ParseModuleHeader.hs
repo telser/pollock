@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# OPTIONS_GHC -Wwarn #-}
 
 -----------------------------------------------------------------------------
 
@@ -16,13 +15,13 @@ Portability :  portable
 -}
 module Haddock.Interface.ParseModuleHeader (parseModuleHeader) where
 
-import Control.Applicative (Alternative (..))
-import Control.Monad (ap)
-import Data.Char (isAlpha, isSpace)
-import GHC.Driver.Session (DynFlags)
+import qualified Control.Applicative as App
+import qualified Control.Monad as M
+import qualified Data.Char as Char
 
-import Haddock.Parser
 import Haddock.Types
+  ( HaddockModInfo (..)
+  )
 
 -- -----------------------------------------------------------------------------
 -- Parsing module headers
@@ -31,17 +30,16 @@ import Haddock.Types
 -- Copyright, License, Maintainer, Stability, Portability, except that
 -- any or all may be omitted.
 parseModuleHeader ::
-  DynFlags -> Maybe Package -> String -> (HaddockModInfo NsRdrName, MDoc NsRdrName)
-parseModuleHeader dflags pkgName str0 =
+  String -> HaddockModInfo
+parseModuleHeader str0 =
   let
     kvs :: [(String, String)]
-    str1 :: String
 
-    (kvs, str1) = maybe ([], str0) id $ runP fields str0
+    kvs = maybe mempty id $ runP fields str0
 
     -- trim whitespaces
     trim :: String -> String
-    trim = dropWhile isSpace . reverse . dropWhile isSpace . reverse
+    trim = dropWhile Char.isSpace . reverse . dropWhile Char.isSpace . reverse
 
     getKey :: String -> Maybe String
     getKey key = fmap trim (lookup key kvs)
@@ -55,19 +53,19 @@ parseModuleHeader dflags pkgName str0 =
     stabilityOpt = getKey "Stability"
     portabilityOpt = getKey "Portability"
    in
-    ( HaddockModInfo
-        { hmi_description = parseString dflags <$> descriptionOpt
-        , hmi_copyright = copyrightOpt
-        , hmi_license = spdxLicenceOpt <|> licenseOpt <|> licenceOpt
-        , hmi_maintainer = maintainerOpt
-        , hmi_stability = stabilityOpt
-        , hmi_portability = portabilityOpt
-        , hmi_safety = Nothing
-        , hmi_language = Nothing -- set in LexParseRn
-        , hmi_extensions = [] -- also set in LexParseRn
-        }
-    , parseParas dflags pkgName str1
-    )
+    -- TODO-POL We probably shouldn't overwrite the extensions, language, or saftey with the inferred and instead report exactly as it is listed in the code
+
+    HaddockModInfo
+      { hmi_description = descriptionOpt
+      , hmi_copyright = copyrightOpt
+      , hmi_license = spdxLicenceOpt App.<|> licenseOpt App.<|> licenceOpt
+      , hmi_maintainer = maintainerOpt
+      , hmi_stability = stabilityOpt
+      , hmi_portability = portabilityOpt
+      , hmi_safety = Nothing
+      , hmi_language = Nothing -- set in LexParseRn
+      , hmi_extensions = [] -- also set in LexParseRn
+      }
 
 -------------------------------------------------------------------------------
 -- Small parser to parse module header.
@@ -108,17 +106,16 @@ newtype P a = P {unP :: [C] -> Maybe ([C], a)}
 
 instance Applicative P where
   pure x = P $ \s -> Just (s, x)
-  (<*>) = ap
+  (<*>) = M.ap
 
 instance Monad P where
-  return = pure
   m >>= k = P $ \s0 -> do
     (s1, x) <- unP m s0
     unP (k x) s1
 
-instance Alternative P where
-  empty = P $ \_ -> Nothing
-  a <|> b = P $ \s -> unP a s <|> unP b s
+instance App.Alternative P where
+  empty = P $ const Nothing
+  a <|> b = P $ \s -> unP a s App.<|> unP b s
 
 runP :: P a -> String -> Maybe a
 runP p input = fmap snd (unP p input')
@@ -137,9 +134,6 @@ curInd :: P Int
 curInd = P $ \s -> Just . (,) s $ case s of
   [] -> 0
   C i _ : _ -> i
-
-rest :: P String
-rest = P $ \cs -> Just ([], [c | C _ c <- cs])
 
 munch :: (Int -> Char -> Bool) -> P String
 munch p = P $ \cs ->
@@ -168,7 +162,7 @@ char c = P $ \s -> case s of
     | otherwise -> Nothing
 
 skipSpaces :: P ()
-skipSpaces = P $ \cs -> Just (dropWhile (\(C _ c) -> isSpace c) cs, ())
+skipSpaces = P $ \cs -> Just (dropWhile (\(C _ c) -> Char.isSpace c) cs, ())
 
 takeWhileMaybe :: (a -> Maybe b) -> [a] -> ([b], [a])
 takeWhileMaybe f = go
@@ -184,17 +178,15 @@ takeWhileMaybe f = go
 
 field :: Int -> P (String, String)
 field i = do
-  fn <- munch1 $ \_ c -> isAlpha c || c == '-'
+  fn <- munch1 $ \_ c -> Char.isAlpha c || c == '-'
   skipSpaces
   _ <- char ':'
   skipSpaces
-  val <- munch $ \j c -> isSpace c || j > i
+  val <- munch $ \j c -> Char.isSpace c || j > i
   return (fn, val)
 
-fields :: P ([(String, String)], String)
+fields :: P [(String, String)]
 fields = do
   skipSpaces
   i <- curInd
-  fs <- many (field i)
-  r <- rest
-  return (fs, r)
+  App.many (field i)

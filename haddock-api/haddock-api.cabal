@@ -18,16 +18,12 @@ tested-with:          GHC==9.4.*
 extra-source-files:
   CHANGES.md
 
-data-dir:
-  resources
-data-files:
-
 library
   default-language: Haskell2010
 
   -- this package typically supports only single major versions
   build-depends: base            >= 4.16.0 && <5
-               , ghc             >= 9.4 && <9.9
+               , ghc             >= 9.2 && <9.9
                , text            >= 2.0 && <2.2
                -- 0.14.4 fixes segfaults with text 2.0
                , attoparsec     >= 0.14.4 && <0.15
@@ -35,16 +31,15 @@ library
   -- Versions for the dependencies below are transitively pinned by
   -- the non-reinstallable `ghc` package and hence need no version
   -- bounds
-  build-depends: bytestring
-               , containers
-               , mtl
-               , transformers
-               , ghc-boot
+  build-depends: containers
 
   hs-source-dirs: src
 
-  ghc-options: -funbox-strict-fields -O2
-               -Wall
+  ghc-options: -funbox-strict-fields
+               -O2
+               -Wmissing-local-signatures
+               -Wno-missing-export-lists
+               -Werror
                -Wcompat
                -Wcompat-unqualified-imports
                -Widentities
@@ -55,19 +50,22 @@ library
                -Wincomplete-record-updates
                -Wunused-packages
 
-
   exposed-modules:
     Pollock
 
   other-modules:
     Pollock.CompatGHC
-    Haddock.Convert
-    Haddock.Doc
-    Haddock.GhcUtils
-    Haddock.Interface.LexParseRn
-    Haddock.Interface.ParseModuleHeader
-    Haddock.Parser.Monad
-    Haddock.Types
+    Pollock.Documentation
+    Pollock.Documentation.Doc
+    Pollock.Documentation.DocumentationForDecl
+    Pollock.Documentation.ExportItem
+    Pollock.Documentation.Metadata
+    Pollock.Documentation.MetadataAndDoc
+    Pollock.Documentation.Parser
+    Pollock.DriverPlugin
+    Pollock.ModuleInfo
+    Pollock.ModuleInfo.ModuleHeader
+    Pollock.ProcessModule
     Paths_haddock_api
 
   autogen-modules:

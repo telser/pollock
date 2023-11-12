@@ -1,21 +1,20 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
-Module      :  Documentation.Haddock.Parser.Monad
-Copyright   :  (c) Alec Theriault 2018-2019,
+Module      :
+Copyright   :
 License     :  BSD-like
 
 Maintainer  :  haddock@projects.haskell.org
 Stability   :  experimental
 Portability :  portable
 
-Defines the Parsec monad over which all parsing is done and also provides
-more efficient versions of the usual parsec combinator functions (but
-specialized to 'T.Text').
 -}
-module Haddock.Parser.Monad where
+module Pollock.Documentation.Parser ( processDocStringParas
+                      , processDocStrings
+                      , parseText
+                      )
+where
 
 import qualified Control.Applicative as App
 import qualified Control.Monad as M
@@ -23,11 +22,36 @@ import qualified Data.Attoparsec.Text as AttoText
 import qualified Data.Char as Char
 import qualified Data.Text as T
 
-import Haddock.Doc
-import Haddock.Types
-import Prelude hiding (takeWhile)
+import qualified Pollock.CompatGHC as CompatGHC
+import Pollock.Documentation.Doc
+    ( Doc(DocCodeBlock, DocEmpty, DocParagraph, DocString,
+          DocProperty) )
+import Pollock.Documentation.Metadata ( Metadata(Metadata, version) )
+import Pollock.Documentation.MetadataAndDoc ( MetaAndDoc(..), withEmptyMetadata, metaAndDocConcat )
 
-since :: AttoText.Parser MetaDoc
+parseText :: T.Text -> Doc
+parseText =
+  either error id
+    . AttoText.parseOnly (fmap docStringFromText AttoText.takeText)
+    . T.filter (/= '\r')
+
+processDocStringParas ::
+  CompatGHC.HsDocString -> MetaAndDoc
+processDocStringParas =
+  either error id . AttoText.parseOnly parseParas . T.pack . filter (/= '\r') . CompatGHC.renderHsDocString
+
+processDocStrings ::
+  [CompatGHC.HsDocString]
+  -> Maybe MetaAndDoc
+processDocStrings strs =
+  case metaAndDocConcat $ fmap processDocStringParas strs of
+        -- We check that we don't have any version info to render instead
+        -- of just checking if there is no comment: there may not be a
+        -- comment but we still want to pass through any meta data.
+        MetaAndDoc{meta = Metadata Nothing, doc = DocEmpty} -> Nothing
+        x -> Just x
+
+since :: AttoText.Parser MetaAndDoc
 since = do
   skipHorizontalSpace
   _ <- AttoText.string "@since "
@@ -35,10 +59,10 @@ since = do
   skipHorizontalSpace
   let
     metadata =
-      Meta
+      Metadata
         { version = Just s
         }
-  App.pure $ MetaDoc metadata DocEmpty
+  pure $ MetaAndDoc metadata DocEmpty
 
 skipHorizontalSpace :: AttoText.Parser ()
 skipHorizontalSpace =
@@ -51,7 +75,7 @@ takeNonEmptyLine :: AttoText.Parser T.Text
 takeNonEmptyLine =
   M.mfilter (T.any (not . Char.isSpace)) takeLine
 
-birdtracks :: AttoText.Parser MetaDoc
+birdtracks :: AttoText.Parser MetaAndDoc
 birdtracks =
   let line = do
         skipHorizontalSpace
@@ -60,7 +84,7 @@ birdtracks =
    in fmap (withEmptyMetadata . DocCodeBlock . docStringFromText . T.intercalate "\n") $
         AttoText.many1 line
 
-paragraph :: AttoText.Parser MetaDoc
+paragraph :: AttoText.Parser MetaAndDoc
 paragraph =
   AttoText.choice
     [ since
@@ -71,12 +95,6 @@ paragraph =
     , fmap (withEmptyMetadata . DocParagraph) textParagraph
     ]
 
-parseText :: T.Text -> Doc
-parseText =
-  either error id
-    . AttoText.parseOnly (fmap docStringFromText AttoText.takeText)
-    . (T.filter (/= '\r'))
-
 docStringFromText :: T.Text -> Doc
 docStringFromText = DocString . T.unpack
 
@@ -85,12 +103,9 @@ textParagraph = do
   lines' <- AttoText.many1 takeNonEmptyLine
   App.pure $ (docStringFromText . T.intercalate "\n") lines'
 
-parseParas' :: String -> MetaDoc
-parseParas' = either error id . AttoText.parseOnly parseParas . T.pack . filter (/= '\r')
-
-parseParas :: AttoText.Parser MetaDoc
+parseParas :: AttoText.Parser MetaAndDoc
 parseParas =
-  fmap metaDocConcat . AttoText.many' $ do
+  fmap metaAndDocConcat . AttoText.many' $ do
     p <- paragraph
     consumeEmptyLines
     App.pure p

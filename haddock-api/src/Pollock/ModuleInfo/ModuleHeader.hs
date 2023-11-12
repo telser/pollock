@@ -1,41 +1,54 @@
 {-# LANGUAGE DeriveFunctor #-}
 
------------------------------------------------------------------------------
-
------------------------------------------------------------------------------
-
-{- |
-Module      :  Haddock.Interface.ParseModuleHeader
-Copyright   :  (c) Simon Marlow 2006, Isaac Dupree 2009
-License     :  BSD-like
-
-Maintainer  :  haddock@projects.haskell.org
-Stability   :  experimental
-Portability :  portable
--}
-module Haddock.Interface.ParseModuleHeader (parseModuleHeader) where
+module Pollock.ModuleInfo.ModuleHeader
+  ( ModuleHeader (..)
+  , processModuleHeader
+  ) where
 
 import qualified Control.Applicative as App
 import qualified Control.Monad as M
 import qualified Data.Char as Char
+import qualified Data.Maybe as Maybe
 
-import Haddock.Types
-  ( HaddockModInfo (..)
-  )
+import qualified Pollock.CompatGHC as CompatGHC
 
--- -----------------------------------------------------------------------------
--- Parsing module headers
+-- FIXME Consider safety, language and extensions if they are manually present? Does anyone
+-- actually do that? Unclear, but could be useful.
+data ModuleHeader = ModuleHeader
+  { description :: !(Maybe String)
+  , copyright :: !(Maybe String)
+  , license :: !(Maybe String)
+  , maintainer :: !(Maybe String)
+  , stability :: !(Maybe String)
+  , portability :: !(Maybe String)
+  }
 
--- NB.  The headers must be given in the order Module, Description,
--- Copyright, License, Maintainer, Stability, Portability, except that
--- any or all may be omitted.
+emptyHaddockModInfo :: ModuleHeader
+emptyHaddockModInfo =
+  ModuleHeader
+    { description = Nothing
+    , copyright = Nothing
+    , license = Nothing
+    , maintainer = Nothing
+    , stability = Nothing
+    , portability = Nothing
+    }
+
+processModuleHeader ::
+  Maybe CompatGHC.HsDocString
+  -> ModuleHeader
+processModuleHeader mayStr =
+  case mayStr of
+    Nothing -> emptyHaddockModInfo
+    Just hds ->
+      parseModuleHeader $ CompatGHC.renderHsDocString hds
+
 parseModuleHeader ::
-  String -> HaddockModInfo
+  String -> ModuleHeader
 parseModuleHeader str0 =
   let
     kvs :: [(String, String)]
-
-    kvs = maybe mempty id $ runP fields str0
+    kvs = Maybe.fromMaybe mempty $ runP fields str0
 
     -- trim whitespaces
     trim :: String -> String
@@ -53,18 +66,13 @@ parseModuleHeader str0 =
     stabilityOpt = getKey "Stability"
     portabilityOpt = getKey "Portability"
    in
-    -- TODO-POL We probably shouldn't overwrite the extensions, language, or saftey with the inferred and instead report exactly as it is listed in the code
-
-    HaddockModInfo
-      { hmi_description = descriptionOpt
-      , hmi_copyright = copyrightOpt
-      , hmi_license = spdxLicenceOpt App.<|> licenseOpt App.<|> licenceOpt
-      , hmi_maintainer = maintainerOpt
-      , hmi_stability = stabilityOpt
-      , hmi_portability = portabilityOpt
-      , hmi_safety = Nothing
-      , hmi_language = Nothing -- set in LexParseRn
-      , hmi_extensions = [] -- also set in LexParseRn
+    ModuleHeader
+      { description = descriptionOpt
+      , copyright = copyrightOpt
+      , license = spdxLicenceOpt App.<|> licenseOpt App.<|> licenceOpt
+      , maintainer = maintainerOpt
+      , stability = stabilityOpt
+      , portability = portabilityOpt
       }
 
 -------------------------------------------------------------------------------
@@ -122,7 +130,7 @@ runP p input = fmap snd (unP p input')
  where
   input' =
     concat
-      [ zipWith C [0 ..] l ++ [C (length l) '\n']
+      [ zipWith C [0 ..] l <> [C (length l) '\n']
       | l <- lines input
       ]
 
@@ -183,7 +191,7 @@ field i = do
   _ <- char ':'
   skipSpaces
   val <- munch $ \j c -> Char.isSpace c || j > i
-  return (fn, val)
+  pure (fn, val)
 
 fields :: P [(String, String)]
 fields = do

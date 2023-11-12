@@ -1,3 +1,3 @@
-roots = [ "Pollock.*", "^Paths_.*"]
+roots = [ "Pollock.ProcessModule.processModule","^Paths_.*"]
 type-class-roots = false
 unused-types = true

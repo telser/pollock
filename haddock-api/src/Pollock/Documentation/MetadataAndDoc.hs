@@ -5,17 +5,17 @@ License     :  MIT
 Maintainer: trevis@flipstone.com
 Stability: experimental
 Portability: non-portable
-
 -}
 module Pollock.Documentation.MetadataAndDoc
-  ( MetaAndDoc(..)
+  ( MetaAndDoc (..)
   , withEmptyMetadata
   , metaAndDocConcat
   , metaAndDocAppend
   ) where
 
-import Pollock.Documentation.Doc
+import Pollock.Documentation.Doc ( docAppend, Doc(DocEmpty) )
 import Pollock.Documentation.Metadata
+    ( Metadata, emptyMetadata, metaAppend )
 
 data MetaAndDoc = MetaAndDoc
   { meta :: !Metadata
@@ -36,9 +36,9 @@ metaAndDocConcat = foldr metaAndDocAppend emptyMetaAndDoc
 metaAndDocAppend :: MetaAndDoc -> MetaAndDoc -> MetaAndDoc
 metaAndDocAppend md1 md2 =
   MetaAndDoc
-  { meta = metaAppend (meta md2) (meta md1)
-  , doc = docAppend (doc md1) (doc md2)
-  }
+    { meta = metaAppend (meta md2) (meta md1)
+    , doc = docAppend (doc md1) (doc md2)
+    }
 
 emptyMetaAndDoc :: MetaAndDoc
 emptyMetaAndDoc = MetaAndDoc{meta = emptyMetadata, doc = DocEmpty}

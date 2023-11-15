@@ -8,12 +8,12 @@ License     :  BSD-like
 Maintainer  :  haddock@projects.haskell.org
 Stability   :  experimental
 Portability :  portable
-
 -}
-module Pollock.Documentation.Parser ( processDocStringParas
-                      , processDocStrings
-                      , parseText
-                      )
+module Pollock.Documentation.Parser
+  ( processDocStringParas
+  , processDocStrings
+  , parseText
+  )
 where
 
 import qualified Control.Applicative as App
@@ -24,10 +24,16 @@ import qualified Data.Text as T
 
 import qualified Pollock.CompatGHC as CompatGHC
 import Pollock.Documentation.Doc
-    ( Doc(DocCodeBlock, DocEmpty, DocParagraph, DocString,
-          DocProperty) )
-import Pollock.Documentation.Metadata ( Metadata(Metadata, version) )
-import Pollock.Documentation.MetadataAndDoc ( MetaAndDoc(..), withEmptyMetadata, metaAndDocConcat )
+  ( Doc
+      ( DocCodeBlock
+      , DocEmpty
+      , DocParagraph
+      , DocProperty
+      , DocString
+      )
+  )
+import Pollock.Documentation.Metadata (Metadata (Metadata, version))
+import Pollock.Documentation.MetadataAndDoc (MetaAndDoc (..), metaAndDocConcat, withEmptyMetadata)
 
 parseText :: T.Text -> Doc
 parseText =
@@ -38,18 +44,22 @@ parseText =
 processDocStringParas ::
   CompatGHC.HsDocString -> MetaAndDoc
 processDocStringParas =
-  either error id . AttoText.parseOnly parseParas . T.pack . filter (/= '\r') . CompatGHC.renderHsDocString
+  either error id
+    . AttoText.parseOnly parseParas
+    . T.pack
+    . filter (/= '\r')
+    . CompatGHC.renderHsDocString
 
 processDocStrings ::
   [CompatGHC.HsDocString]
   -> Maybe MetaAndDoc
 processDocStrings strs =
   case metaAndDocConcat $ fmap processDocStringParas strs of
-        -- We check that we don't have any version info to render instead
-        -- of just checking if there is no comment: there may not be a
-        -- comment but we still want to pass through any meta data.
-        MetaAndDoc{meta = Metadata Nothing, doc = DocEmpty} -> Nothing
-        x -> Just x
+    -- We check that we don't have any version info to render instead
+    -- of just checking if there is no comment: there may not be a
+    -- comment but we still want to pass through any meta data.
+    MetaAndDoc{meta = Metadata Nothing, doc = DocEmpty} -> Nothing
+    x -> Just x
 
 since :: AttoText.Parser MetaAndDoc
 since = do

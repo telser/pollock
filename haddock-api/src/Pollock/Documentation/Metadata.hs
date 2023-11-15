@@ -6,19 +6,18 @@ License: MIT
 Maintainer: trevis@flipstone.com
 Stability: experimental
 Portability: portable
-
 -}
 module Pollock.Documentation.Metadata
-  ( Metadata(..)
+  ( Metadata (..)
   , emptyMetadata
   , metaAppend
-  , Version
+  , metadataHasSinceVersion
   ) where
 
 import Control.Applicative ((<|>))
 
 newtype Metadata = Metadata
-  { version :: Maybe Version
+  { version :: Maybe SinceVersion
   }
 
 emptyMetadata :: Metadata
@@ -31,4 +30,8 @@ emptyMetadata =
 metaAppend :: Metadata -> Metadata -> Metadata
 metaAppend (Metadata v1) (Metadata v2) = Metadata (v1 <|> v2)
 
-type Version = [Int]
+metadataHasSinceVersion :: Metadata -> Bool
+metadataHasSinceVersion (Metadata Nothing) = False
+metadataHasSinceVersion (Metadata (Just vs)) = not $ null vs
+
+type SinceVersion = [Int]

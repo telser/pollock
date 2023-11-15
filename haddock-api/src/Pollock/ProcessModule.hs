@@ -12,7 +12,9 @@ License     :  MIT
 Maintainer  :  trevis@flipstone.com
 Stability   :  experimental
 -}
-module Pollock.ProcessModule (processModule) where
+module Pollock.ProcessModule
+  ( processModule
+  ) where
 
 import qualified Control.Applicative as Applicative
 import qualified Control.Monad.IO.Class as MIO
@@ -127,7 +129,12 @@ unrestrictedModuleImports idecls =
   impModMap =
     Map.fromListWith (++) (concatMap moduleMapping idecls)
 
-  moduleMapping :: (CompatGHC.XRec pass CompatGHC.ModuleName                                              ~ CompatGHC.GenLocated l CompatGHC.ModuleName) => CompatGHC.ImportDecl pass -> [(CompatGHC.ModuleName, [CompatGHC.ImportDecl pass])]
+  moduleMapping ::
+    ( CompatGHC.XRec pass CompatGHC.ModuleName
+        ~ CompatGHC.GenLocated l CompatGHC.ModuleName
+    ) =>
+    CompatGHC.ImportDecl pass
+    -> [(CompatGHC.ModuleName, [CompatGHC.ImportDecl pass])]
   moduleMapping idecl =
     concat
       [ [(CompatGHC.unLoc (CompatGHC.ideclName idecl), [idecl])]
@@ -136,7 +143,14 @@ unrestrictedModuleImports idecls =
         ]
       ]
 
-  isInteresting :: (CompatGHC.XRec pass [CompatGHC.XRec pass (CompatGHC.IE pass)]                           ~ CompatGHC.GenLocated                                                                    l [CompatGHC.XRec pass (CompatGHC.IE pass)]) =>                                  CompatGHC.ImportDecl pass -> Bool
+  isInteresting ::
+    ( CompatGHC.XRec pass [CompatGHC.XRec pass (CompatGHC.IE pass)]
+        ~ CompatGHC.GenLocated
+            l
+            [CompatGHC.XRec pass (CompatGHC.IE pass)]
+    ) =>
+    CompatGHC.ImportDecl pass
+    -> Bool
   isInteresting idecl =
     case CompatGHC.ideclHiding idecl of
       -- i) no subset selected
@@ -164,20 +178,33 @@ parseWarning w =
   let
     format :: String -> String -> Documentation.Doc
     format x =
-      Documentation.DocWarning . Documentation.DocParagraph . Documentation.DocAppend (Documentation.DocString x) . Documentation.parseText . T.pack
+      Documentation.DocWarning
+        . Documentation.DocParagraph
+        . Documentation.DocAppend (Documentation.DocString x)
+        . Documentation.parseText
+        . T.pack
 
-    foldMsgs :: Foldable t => t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass)) -> String
+    foldMsgs ::
+      (Foldable t) =>
+      t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
+      -> String
     foldMsgs =
       foldMap (CompatGHC.unpackFS . CompatGHC.sl_fs . CompatGHC.hsDocString . CompatGHC.unLoc)
 
-    formatDeprecated :: Foldable t => t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass)) -> Documentation.Doc
+    formatDeprecated ::
+      (Foldable t) =>
+      t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
+      -> Documentation.Doc
     formatDeprecated =
       format "Deprecated: " . foldMsgs
 
-    formatWarning :: Foldable t => t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass)) -> Documentation.Doc
+    formatWarning ::
+      (Foldable t) =>
+      t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
+      -> Documentation.Doc
     formatWarning =
       format "Warning: " . foldMsgs
-  in
+   in
     CompatGHC.mapWarningTxtMsg formatDeprecated formatWarning w
 
 --------------------------------------------------------------------------------
@@ -195,7 +222,6 @@ type Maps =
 type DocMap = Map.Map CompatGHC.Name Documentation.MetaAndDoc
 type ArgMap = Map.Map CompatGHC.Name Documentation.FnArgsDoc
 type WarningMap = Map.Map CompatGHC.Name Documentation.Doc
-
 
 {- | Create 'Maps' by looping through the declarations. For each declaration,
 find its names, its subordinates, and its doc strings. Process doc strings
@@ -220,7 +246,8 @@ mkMaps instances hsdecls thDocs =
   f :: (Ord a, Monoid b) => [[(a, b)]] -> Map.Map a b
   f = Map.fromListWith (<>) . concat
 
-  f' :: [[(CompatGHC.Name, Documentation.MetaAndDoc)]] -> Map.Map CompatGHC.Name Documentation.MetaAndDoc
+  f' ::
+    [[(CompatGHC.Name, Documentation.MetaAndDoc)]] -> Map.Map CompatGHC.Name Documentation.MetaAndDoc
   f' = Map.fromListWith Documentation.metaAndDocAppend . concat
 
   filterMapping :: (b -> Bool) -> [[(a, b)]] -> [[(a, b)]]
@@ -229,7 +256,10 @@ mkMaps instances hsdecls thDocs =
   -- \| Extract the mappings from template haskell.
   -- No DeclMap/InstMap is needed since we already have access to the
   -- doc strings
-  thMappings :: (Map.Map CompatGHC.Name Documentation.MetaAndDoc, Map.Map CompatGHC.Name (IM.IntMap Documentation.MetaAndDoc))
+  thMappings ::
+    ( Map.Map CompatGHC.Name Documentation.MetaAndDoc
+    , Map.Map CompatGHC.Name (IM.IntMap Documentation.MetaAndDoc)
+    )
   thMappings =
     let CompatGHC.ExtractedTHDocs
           _
@@ -266,7 +296,9 @@ mkMaps instances hsdecls thDocs =
           fmap (\(n, ds, im) -> (n, fmap CompatGHC.hsDocString ds, fmap CompatGHC.hsDocString im)) $
             CompatGHC.subordinates CompatGHC.emptyOccEnv instanceMap decl
 
-        fn :: (a, [CompatGHC.HsDocString], IM.IntMap CompatGHC.HsDocString)               -> (Maybe Documentation.MetaAndDoc, IM.IntMap Documentation.MetaAndDoc)
+        fn ::
+          (a, [CompatGHC.HsDocString], IM.IntMap CompatGHC.HsDocString)
+          -> (Maybe Documentation.MetaAndDoc, IM.IntMap Documentation.MetaAndDoc)
         fn (_, strs, m) = declDoc strs m
         (subDocs, subArgs) = unzip $ fmap fn subs
 
@@ -367,11 +399,18 @@ mkExportItems
           allExports
       Just exports -> concat $ mapM lookupExport exports
    where
-    lookupExport :: (CompatGHC.XRec pass CompatGHC.ModuleName                          ~ CompatGHC.GenLocated l CompatGHC.ModuleName) =>                         (CompatGHC.IE pass, [CompatGHC.AvailInfo]) -> [Documentation.ExportItem]
+    lookupExport ::
+      ( CompatGHC.XRec pass CompatGHC.ModuleName
+          ~ CompatGHC.GenLocated l CompatGHC.ModuleName
+      ) =>
+      (CompatGHC.IE pass, [CompatGHC.AvailInfo])
+      -> [Documentation.ExportItem]
     lookupExport (CompatGHC.IEGroup _ _ _, _) =
       mempty
     lookupExport (CompatGHC.IEDoc _ docStr, _) =
-      [Documentation.mkExportDoc . Documentation.processDocStringParas . CompatGHC.hsDocString $ CompatGHC.unLoc docStr]
+      [ Documentation.mkExportDoc . Documentation.processDocStringParas . CompatGHC.hsDocString $
+          CompatGHC.unLoc docStr
+      ]
     lookupExport (CompatGHC.IEDocNamed _ _, _) =
       -- FIXME: If we have some named docs then that isn't really an export of some code to keep
       -- track of for coverage or other analysis. Make sure we don't need to restore this for
@@ -448,7 +487,9 @@ availExportItem
 
     findDecl ::
       CompatGHC.AvailInfo
-      -> ([CompatGHC.LHsDecl CompatGHC.GhcRn], (Documentation.DocumentationForDecl, [(CompatGHC.Name, Documentation.DocumentationForDecl)]))
+      -> ( [CompatGHC.LHsDecl CompatGHC.GhcRn]
+         , (Documentation.DocumentationForDecl, [(CompatGHC.Name, Documentation.DocumentationForDecl)])
+         )
     findDecl avail'
       | m == semMod =
           case Map.lookup n declMap of
@@ -492,7 +533,6 @@ lookupDocs ::
   -> (Documentation.DocumentationForDecl, [(CompatGHC.Name, Documentation.DocumentationForDecl)])
 lookupDocs avail' warnings docMap argMap =
   let n = CompatGHC.availName avail'
-      lookupArgDoc x = Map.findWithDefault IM.empty x argMap
       lookupDoc name =
         Documentation.DocumentationForDecl
           (Map.lookup name docMap)
@@ -553,7 +593,10 @@ fullModuleContents
 pruneExportItems :: [Documentation.ExportItem] -> [Documentation.ExportItem]
 pruneExportItems = filter hasDoc
  where
-  hasDoc (Documentation.ExportItemDecl (Documentation.ExportDecl{Documentation.expItemMbDoc = Documentation.DocumentationForDecl d _ _})) = Maybe.isJust d
+  hasDoc
+    ( Documentation.ExportItemDecl
+        (Documentation.ExportDecl{Documentation.expItemMbDoc = Documentation.DocumentationForDecl d _ _})
+      ) = Maybe.isJust d
   hasDoc _ = True
 
 seqList :: [a] -> ()

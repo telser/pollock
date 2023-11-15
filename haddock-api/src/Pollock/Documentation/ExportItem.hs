@@ -6,35 +6,78 @@ License:  MIT
 Maintainer: trevis@flipstone.com
 Stability: experimental
 Portability: portable
-
 -}
 module Pollock.Documentation.ExportItem
-  ( ExportItem(..)
+  ( ExportItem (..)
   , mkExportDoc
-  , ExportDecl(..)
+  , ExportDecl (..)
+  , exportItemHasSinceVersion
+  , exportItemHasCodeBlock
+  , exportItemHasExample
+  , exportItemHasProperty
+  , exportItemHasWarning
   ) where
 
-import qualified Pollock.CompatGHC as CompatGHC
+import Pollock.Documentation.Doc
+  (docHasWarning
+  , docHasProperty
+  , docHasCodeBlock
+  , docHasExamples
+  )
 import Pollock.Documentation.DocumentationForDecl
-    ( DocumentationForDecl )
-import Pollock.Documentation.MetadataAndDoc ( MetaAndDoc )
+  ( DocumentationForDecl
+  , documentationDoc
+  )
+import Pollock.Documentation.Metadata (metadataHasSinceVersion)
+import Pollock.Documentation.MetadataAndDoc (MetaAndDoc, meta, doc)
 
 data ExportItem
   = ExportItemDecl {-# UNPACK #-} !ExportDecl
-  | ExportItemDoc !ExportDoc
+  | ExportItemDoc !MetaAndDoc
 
 mkExportDoc :: MetaAndDoc -> ExportItem
-mkExportDoc = ExportItemDoc . ExportDoc
+mkExportDoc = ExportItemDoc
 
-data ExportDecl = ExportDecl
-  { -- pollock_expItemDecl :: !(CompatGHC.LHsDecl name)
-    -- -- ^ A declaration.
-    -- ,
-    expItemMbDoc :: {-# UNPACK #-} !DocumentationForDecl
-  -- ^ Maybe a doc comment, and possibly docs for arguments (if this
-  -- decl is a function or type-synonym).
-  -- , pollock_expItemSubDocs :: ![(CompatGHC.IdP name, DocumentationForDecl)]
-  -- ^ Subordinate names, possibly with documentation.
+newtype ExportDecl = ExportDecl
+  { expItemMbDoc :: DocumentationForDecl
   }
 
-newtype ExportDoc = ExportDoc MetaAndDoc
+exportItemHasSinceVersion :: ExportItem -> Bool
+exportItemHasSinceVersion (ExportItemDoc md) =
+  metadataHasSinceVersion $ meta md
+exportItemHasSinceVersion (ExportItemDecl decl) =
+  case documentationDoc $ expItemMbDoc decl of
+    Nothing -> False
+    Just md -> metadataHasSinceVersion $ meta md
+
+exportItemHasWarning :: ExportItem -> Bool
+exportItemHasWarning (ExportItemDoc md) =
+  docHasWarning $ doc md
+exportItemHasWarning (ExportItemDecl decl) =
+  case documentationDoc $ expItemMbDoc decl of
+    Nothing -> False
+    Just md -> docHasWarning $ doc md
+
+exportItemHasProperty :: ExportItem -> Bool
+exportItemHasProperty (ExportItemDoc md) =
+  docHasProperty $ doc md
+exportItemHasProperty (ExportItemDecl decl) =
+  case documentationDoc $ expItemMbDoc decl of
+    Nothing -> False
+    Just md -> docHasProperty $ doc md
+
+exportItemHasExample :: ExportItem -> Bool
+exportItemHasExample (ExportItemDoc md) =
+  docHasExamples $ doc md
+exportItemHasExample (ExportItemDecl decl) =
+  case documentationDoc $ expItemMbDoc decl of
+    Nothing -> False
+    Just md -> docHasExamples $ doc md
+
+exportItemHasCodeBlock :: ExportItem -> Bool
+exportItemHasCodeBlock (ExportItemDoc md) =
+  docHasCodeBlock $ doc md
+exportItemHasCodeBlock (ExportItemDecl decl) =
+  case documentationDoc $ expItemMbDoc decl of
+    Nothing -> False
+    Just md -> docHasCodeBlock $ doc md

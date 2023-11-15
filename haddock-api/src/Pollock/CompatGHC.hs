@@ -35,7 +35,7 @@ module Pollock.CompatGHC
   , subordinates
   , topDecls
   -- GHC
-  , DynFlags(..)
+  , DynFlags (..)
   , GenLocated (L)
   , HsDocString
   , Name
@@ -75,9 +75,9 @@ module Pollock.CompatGHC
   , DocDecl (DocCommentNamed, DocGroup)
   , XRec
   , Located
-  , HscEnv(..)
+  , HscEnv (..)
   -- GHC.Plugins
-  , GeneralFlag(Opt_Haddock)
+  , GeneralFlag (Opt_Haddock)
   , lookupSrcSpan
   , getName
   , unLoc
@@ -107,6 +107,7 @@ import qualified Data.Map.Strict as Map
 import GHC hiding (typeKind)
 import GHC.Plugins hiding (delFV, unitFV)
 
+import qualified GHC.Data.EnumSet as EnumSet
 import GHC.HsToCore.Docs
   ( declTypeDocs
   , extractTHDocs
@@ -133,10 +134,9 @@ import GHC.Tc.Types
       , tcg_warns
       )
   )
-import GHC.Types.SourceText (sl_fs, StringLiteral)
+import GHC.Types.SourceText (StringLiteral, sl_fs)
 import qualified GHC.Types.Unique.Map as UniqMap
 import GHC.Unit.Module.Warnings (WarningTxt (..), Warnings (..))
-import qualified GHC.Data.EnumSet as EnumSet
 
 #if __GLASGOW_HASKELL__ == 908
 import GHC.Types.Avail
@@ -346,5 +346,5 @@ nonDetEltUniqMapToMap :: (Ord k) => UniqMap.UniqMap k a -> Map.Map k a
 nonDetEltUniqMapToMap = Map.fromList . nonDetUniqMapToList
 
 -- | A Helper to keep the interface clean avoiding any potential conflicts with 'insert'.
-insertEnumSet :: Enum a => a -> EnumSet.EnumSet a -> EnumSet.EnumSet a
+insertEnumSet :: (Enum a) => a -> EnumSet.EnumSet a -> EnumSet.EnumSet a
 insertEnumSet = EnumSet.insert

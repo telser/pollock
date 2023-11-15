@@ -6,14 +6,20 @@ License:  MIT
 Maintainer: trevis@flipstone.com
 Stability: experimental
 Portability: portable
-
 -}
-
 module Pollock.Documentation.Doc
-  (Doc(..), docAppend, Example(..) ) where
+  ( Doc (..)
+  , docAppend
+  , Example (..)
+  , docHasWarning
+  , docHasCodeBlock
+  , docHasProperty
+  , docHasExamples
+  ) where
 
--- | A simplified model for haddock documentation. Note this diverges from haddock itself as many of
--- the complexities, particularly around display, are not needed for this use case.
+{- | A simplified model for haddock documentation. Note this diverges from haddock itself as many of
+the complexities, particularly around display, are not needed for this use case.
+-}
 data Doc
   = DocEmpty
   | DocAppend !Doc !Doc
@@ -36,3 +42,71 @@ data Example = Example
   { exampleExpression :: !String
   , exampleResult :: ![String]
   }
+
+docHasWarning :: Doc -> Bool
+docHasWarning =
+  let
+    go doc =
+      case doc of
+        DocWarning _ -> True
+        DocEmpty -> False
+        DocString _ -> False
+        DocProperty _ -> False
+        DocExamples _ -> False
+        DocParagraph d -> go d
+        DocCodeBlock d -> go d
+        DocAppend d1 d2 ->
+          go d1 || go d2
+   in
+    go
+
+docHasCodeBlock :: Doc -> Bool
+docHasCodeBlock =
+  let
+    go doc =
+      case doc of
+        DocCodeBlock _ -> True
+        DocEmpty -> False
+        DocString _ -> False
+        DocProperty _ -> False
+        DocExamples _ -> False
+        DocWarning d -> go d
+        DocParagraph d -> go d
+        DocAppend d1 d2 ->
+          go d1 || go d2
+   in
+    go
+
+docHasProperty :: Doc -> Bool
+docHasProperty =
+  let
+    go doc =
+      case doc of
+        DocProperty _ -> True
+        DocEmpty -> False
+        DocString _ -> False
+        DocExamples _ -> False
+        DocCodeBlock d -> go d
+        DocWarning d -> go d
+        DocParagraph d -> go d
+        DocAppend d1 d2 ->
+          go d1 || go d2
+   in
+    go
+
+docHasExamples :: Doc -> Bool
+docHasExamples =
+  let
+    go doc =
+      case doc of
+        DocExamples _ -> True
+        DocEmpty -> False
+        DocString _ -> False
+        DocProperty _ -> False
+        DocCodeBlock d -> go d
+        DocWarning d -> go d
+        DocParagraph d -> go d
+        DocAppend d1 d2 ->
+          go d1 || go d2
+   in
+    go

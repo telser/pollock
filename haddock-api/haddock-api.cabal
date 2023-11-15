@@ -64,6 +64,7 @@ library
     Pollock.Documentation.Parser
     Pollock.DriverPlugin
     Pollock.ModuleInfo
+    Pollock.ModuleInfo.ModuleInfo
     Pollock.ModuleInfo.ModuleHeader
     Pollock.ProcessModule
     Paths_haddock_api

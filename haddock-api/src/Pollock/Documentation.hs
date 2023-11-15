@@ -8,12 +8,11 @@ Stability:  experimental
 Portability:  non-portable
 
 Core types and functionality related to a model of haddock documentation.
-
 -}
 module Pollock.Documentation
   ( module Export
   )
-  where
+where
 
 import Pollock.Documentation.Doc as Export
 import Pollock.Documentation.DocumentationForDecl as Export

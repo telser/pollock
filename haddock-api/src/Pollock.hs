@@ -1,13 +1,18 @@
 {- |
-Module      :  Pollock
-Copyright   :  (c) Trevis Elser 2023
-License     :  MIT
+Module: Pollock
+Copyright: (c) Trevis Elser 2023
+License: MIT
 
-Maintainer  :  trevis@flipstone.com
-Stability   :  experimental
+Maintainer: trevis@flipstone.com
+Stability: experimental
 -}
-module Pollock (processModule, ModuleHeader (..), ensureHaddockIsOn) where
+module Pollock
+  ( processModule
+  , ModuleHeader (..)
+  , ModuleInfo (..)
+  , ensureHaddockIsOn
+  ) where
 
 import Pollock.DriverPlugin (ensureHaddockIsOn)
-import Pollock.ModuleInfo (ModuleHeader (..))
+import Pollock.ModuleInfo (ModuleHeader (..), ModuleInfo (..))
 import Pollock.ProcessModule (processModule)

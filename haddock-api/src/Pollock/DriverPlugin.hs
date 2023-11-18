@@ -1,3 +1,10 @@
+{- |
+Module: Pollock.DriverPlugin
+Copyright: (c) Trevis Elser 2023
+License: MIT
+Maintainer: trevis@flipstone.com
+Stability: experimental
+-}
 module Pollock.DriverPlugin
   ( ensureHaddockIsOn
   ) where

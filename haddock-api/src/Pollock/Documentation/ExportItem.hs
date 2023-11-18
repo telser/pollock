@@ -19,17 +19,17 @@ module Pollock.Documentation.ExportItem
   ) where
 
 import Pollock.Documentation.Doc
-  (docHasWarning
-  , docHasProperty
-  , docHasCodeBlock
+  ( docHasCodeBlock
   , docHasExamples
+  , docHasProperty
+  , docHasWarning
   )
 import Pollock.Documentation.DocumentationForDecl
   ( DocumentationForDecl
   , documentationDoc
   )
 import Pollock.Documentation.Metadata (metadataHasSinceVersion)
-import Pollock.Documentation.MetadataAndDoc (MetaAndDoc, meta, doc)
+import Pollock.Documentation.MetadataAndDoc (MetaAndDoc, doc, meta)
 
 data ExportItem
   = ExportItemDecl {-# UNPACK #-} !ExportDecl

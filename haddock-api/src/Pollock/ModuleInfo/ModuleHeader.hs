@@ -1,5 +1,11 @@
-{-# LANGUAGE DeriveFunctor #-}
-
+{- |
+Module:  Pollock.ModuleInfo.ModuleHeader
+Copyright: (c) Trevis Elser 2023
+License:  MIT
+Maintainer: trevis@flipstone.com
+Stability: experimental
+Portability: not-portable
+-}
 module Pollock.ModuleInfo.ModuleHeader
   ( ModuleHeader (..)
   , processModuleHeader
@@ -110,16 +116,27 @@ Thus we can munch all spaces but only not-spaces which are indented.
 data C = C {-# UNPACK #-} !Int Char
 
 newtype P a = P {unP :: [C] -> Maybe ([C], a)}
-  deriving (Functor)
+
+instance Functor P where
+  fmap f (P pn) =
+    P ((fmap . fmap) f . pn)
 
 instance Applicative P where
   pure x = P $ \s -> Just (s, x)
-  (<*>) = M.ap
+  (<*>) m1 m2 =
+      P $ \t0 ->
+    case unP m1 t0 of
+      Nothing -> Nothing
+      Just (t1, z) ->
+        (fmap . fmap) z (unP m2 t1)
 
 instance Monad P where
-  m >>= k = P $ \s0 -> do
-    (s1, x) <- unP m s0
-    unP (k x) s1
+  m >>= k =
+    P $ \s0 ->
+    case unP m s0 of
+      Nothing -> Nothing
+      Just (s1, x) -> unP (k x) s1
+  return = pure
 
 instance App.Alternative P where
   empty = P $ const Nothing

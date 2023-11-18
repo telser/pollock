@@ -11,3 +11,4 @@ module Pollock.ModuleInfo
   ) where
 
 import Pollock.ModuleInfo.ModuleHeader as Export
+import Pollock.ModuleInfo.ModuleInfo as Export

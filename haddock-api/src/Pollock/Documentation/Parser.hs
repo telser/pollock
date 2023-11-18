@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
-Module      :
-Copyright   :
-License     :  BSD-like
-
-Maintainer  :  haddock@projects.haskell.org
-Stability   :  experimental
-Portability :  portable
+Module: Pollock.Documentation.Parser
+Copyright: (c) Trevis Elser 2023
+License: MIT
+Maintainer: trevis@flipstone.com
+Stability: experimental
+Portability: non-portable
 -}
 module Pollock.Documentation.Parser
   ( processDocStringParas

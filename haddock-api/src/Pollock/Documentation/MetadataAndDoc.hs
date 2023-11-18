@@ -1,10 +1,9 @@
 {- |
-Module      : Pollock.Documentation.MetadataAndDoc
-Copyright   : (c) Trevis Elser 2023
-License     :  MIT
+Module: Pollock.Documentation.MetadataAndDoc
+Copyright: (c) Trevis Elser 2023
+License: MIT
 Maintainer: trevis@flipstone.com
 Stability: experimental
-Portability: non-portable
 -}
 module Pollock.Documentation.MetadataAndDoc
   ( MetaAndDoc (..)
@@ -13,9 +12,12 @@ module Pollock.Documentation.MetadataAndDoc
   , metaAndDocAppend
   ) where
 
-import Pollock.Documentation.Doc ( docAppend, Doc(DocEmpty) )
+import Pollock.Documentation.Doc (Doc (DocEmpty), docAppend)
 import Pollock.Documentation.Metadata
-    ( Metadata, emptyMetadata, metaAppend )
+  ( Metadata
+  , emptyMetadata
+  , metaAppend
+  )
 
 data MetaAndDoc = MetaAndDoc
   { meta :: !Metadata

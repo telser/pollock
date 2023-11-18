@@ -1,18 +1,17 @@
 {- |
-Module:  Pollock.Documentation.DocumentationForDecl
-Copyright:  (c) Trevis Elser 2023
-License:  MIT
+Module: Pollock.Documentation.DocumentationForDecl
+Copyright: (c) Trevis Elser 2023
+License: MIT
 
-Maintainer:  trevis@flipstone.com
-Stability:  experimental
-Portability:  non-portable
+Maintainer: trevis@flipstone.com
+Stability: experimental
+Portability: non-portable
 
 Type and functionality related to documentation for a declaration.
 -}
 module Pollock.Documentation.DocumentationForDecl
   ( DocumentationForDecl (..)
   , FnArgsDoc
-  , noDocumentationForDecl
   )
 where
 
@@ -30,6 +29,3 @@ data DocumentationForDecl = DocumentationForDecl
 
 -- | Arguments are indexed by Int, zero-based from the left.
 type FnArgsDoc = IM.IntMap MetaAndDoc
-
-noDocumentationForDecl :: DocumentationForDecl
-noDocumentationForDecl = DocumentationForDecl Nothing Nothing mempty

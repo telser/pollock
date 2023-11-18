@@ -22,10 +22,8 @@ module Pollock.CompatGHC
   , lookupNameEnv
   , GlobalRdrEnv
   , sl_fs
-  , nonDetEltsUniqMap
-  , nonDetUniqMapToList
-  , Warnings (..)
-  , WarningTxt (..)
+  , Warnings
+  , WarningTxt
   , declTypeDocs
   , extractTHDocs
   , getInstLoc
@@ -35,26 +33,21 @@ module Pollock.CompatGHC
   , subordinates
   , topDecls
   -- GHC
-  , DynFlags (..)
+  , DynFlags (generalFlags)
   , GenLocated (L)
   , HsDocString
   , Name
-  , SafeHaskellMode
-  , TyThing (..)
   , renderHsDocString
   , GhcRn
   , IdP
   , LHsDecl
   , Module
-  , HsDecl (InstD, DerivD, ValD, SigD, TyClD, DocD)
-  , TyClDecl
-    ( ClassDecl
-    )
+  , HsDecl (InstD, DerivD, ValD, SigD, DocD)
   , feqn_tycon
   , InstDecl
     ( TyFamInstD
     )
-  , TyFamInstDecl (TyFamInstDecl, tfid_eqn, tfid_xtn)
+  , TyFamInstDecl (TyFamInstDecl)
   , ModuleName
   , SrcSpanAnnA
   , collectHsBindBinders
@@ -67,15 +60,15 @@ module Pollock.CompatGHC
   , ImportDecl
   , ideclName
   , ideclAs
-  , ideclHiding
+  , ideclImportList
+  , ImportListInterpretation(Exactly,EverythingBut)
   , CollectFlag (CollNoDictBinders)
   , SrcSpanAnn' (SrcSpanAnn, locA)
   , RealSrcSpan
-  , SrcSpan (..)
+  , SrcSpan(RealSrcSpan)
   , DocDecl (DocCommentNamed, DocGroup)
-  , XRec
   , Located
-  , HscEnv (..)
+  , HscEnv (hsc_dflags)
   -- GHC.Plugins
   , GeneralFlag (Opt_Haddock)
   , lookupSrcSpan
@@ -102,6 +95,7 @@ module Pollock.CompatGHC
 
 import qualified Control.Arrow as Arrow
 import qualified Control.Monad as M
+import qualified Data.Maybe as Maybe
 import qualified Data.Map.Strict as Map
 
 import GHC hiding (typeKind)
@@ -176,25 +170,9 @@ import GHC.Types.Avail
   , nubAvails
   )
 import GHC.Types.Unique.Map (nonDetEltsUniqMap)
-#elif __GLASGOW_HASKELL__ == 902
 #endif
 
 #if __GLASGOW_HASKELL__ == 908
--- FIXME Invert this so we have an 'ideclImportList' in 9.4 case with type to match rather than than
--- keeping the 9.4 style interface
-ideclHiding :: ImportDecl pass -> Maybe (Bool, XRec pass [XRec pass (IE pass)])
-ideclHiding decl =
-  case ideclImportList decl of
-    Nothing -> Nothing
-    Just (EverythingBut, n) -> Just (True,n)
-    Just (_,n) -> Just (False,n)
-
-lookupOcc :: OccEnv [a] -> OccName -> [a]
-lookupOcc env occ =
-  case lookupOccEnv env occ of
-    Nothing -> []
-    Just x -> x
-
 lookupOccName :: OccEnv [GlobalRdrEltX info] -> OccName -> [Name]
 lookupOccName env = fmap greName . lookupOcc env
 
@@ -227,24 +205,9 @@ mapWarningTxtMsg deprecatedFn warnFn warnTxt =
     WarningTxt _ _ msgs -> warnFn msgs
 
 #elif __GLASGOW_HASKELL__ == 906
--- FIXME Invert this so we have an 'ideclImportList' in 9.4 case with type to match rather than than
--- keeping the 9.4 style interface
-ideclHiding :: ImportDecl pass -> Maybe (Bool, XRec pass [XRec pass (IE pass)])
-ideclHiding decl =
-  case ideclImportList decl of
-    Nothing -> Nothing
-    Just (EverythingBut, n) -> Just (True,n)
-    Just (_,n) -> Just (False,n)
-
 -- | Shim for using the GHC 9.8 api
 availSubordinateNames :: AvailInfo -> [Name]
 availSubordinateNames = fmap greNameMangledName . availSubordinateGreNames
-
-lookupOcc :: OccEnv [a] -> OccName -> [a]
-lookupOcc env occ =
-  case lookupOccEnv env occ of
-    Nothing -> []
-    Just x -> x
 
 lookupOccName :: OccEnv [GlobalRdrElt] -> OccName -> [Name]
 lookupOccName env = fmap greMangledName . lookupOcc env
@@ -286,6 +249,17 @@ mapWarningTxtMsg deprecatedFn warnFn warnTxt =
 
 #elif __GLASGOW_HASKELL__ == 904
 
+-- | Compatibility shim as this datatype was added in GHC 9.6, along with 'ideclImportList'
+data ImportListInterpretation = Exactly | EverythingBut
+
+-- | Compatibility shim as GHC 9.4 used 'ideclHiding', but later changed to 'ideclImportList'.
+ideclImportList :: ImportDecl pass -> Maybe (ImportListInterpretation, XRec pass [XRec pass (IE pass)])
+ideclImportList idecl =
+  case ideclHiding idecl of
+    Nothing -> Nothing
+    Just (True, n) -> Just (EverythingBut,n)
+    Just (False,n) -> Just (Exactly,n)
+
 -- | availNames was changed to include the selectors, it would seem, so we create a shim for 9.4 to
 -- have an api more like later versions
 availNames :: AvailInfo -> [Name]
@@ -294,12 +268,6 @@ availNames = availNamesWithSelectors
 -- | Shim for using the GHC 9.8 api
 availSubordinateNames :: AvailInfo -> [Name]
 availSubordinateNames = fmap greNameMangledName . availSubordinateGreNames
-
-lookupOcc :: OccEnv [a] -> OccName -> [a]
-lookupOcc env occ =
-  case lookupOccEnv env occ of
-    Nothing -> []
-    Just x -> x
 
 lookupOccName :: OccEnv [GlobalRdrElt] -> OccName -> [Name]
 lookupOccName env = fmap greMangledName . lookupOcc env
@@ -341,6 +309,11 @@ mapWarningTxtMsg deprecatedFn warnFn warnTxt =
     WarningTxt _ msgs -> warnFn msgs
 
 #endif
+
+-- | Simple helper used above but definable consistently across GHC versions.
+lookupOcc :: OccEnv [a] -> OccName -> [a]
+lookupOcc env =
+ Maybe.fromMaybe mempty . lookupOccEnv env
 
 nonDetEltUniqMapToMap :: (Ord k) => UniqMap.UniqMap k a -> Map.Map k a
 nonDetEltUniqMapToMap = Map.fromList . nonDetUniqMapToList

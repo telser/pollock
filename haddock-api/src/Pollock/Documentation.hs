@@ -1,11 +1,10 @@
 {- |
-Module:  Pollock.Documentation
-Copyright:  (c) Trevis Elser 2023
-License:  MIT
-
-Maintainer:  trevis@flipstone.com
-Stability:  experimental
-Portability:  non-portable
+Module: Pollock.Documentation
+Copyright: (c) Trevis Elser 2023
+License: MIT
+Maintainer: trevis@flipstone.com
+Stability: experimental
+Portability: non-portable
 
 Core types and functionality related to a model of haddock documentation.
 -}

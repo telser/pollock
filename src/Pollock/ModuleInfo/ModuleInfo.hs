@@ -17,16 +17,23 @@ import qualified Pollock.CompatGHC as CompatGHC
 import qualified Pollock.Documentation as Documentation
 import Pollock.ModuleInfo.ModuleHeader
 
--- FIXME Haddock this at a minimum
 data ModuleInfo = ModuleInfo
   { moduleHeader :: !ModuleHeader
+  -- ^ The haddock module header
   , haddockableExports :: !Int
+  -- ^ How many exported items that could have documentation attached.
   , haddockedExports :: !Int
+  -- ^ How many exported items that do have haddock attached.
   , numWithSince :: !Int
+  -- ^ How many exported items have a since annotation.
   , numWithCodeBlock :: !Int
+  -- ^ How many exported items have a code block included in the documentation.
   , numWithExample :: !Int
+  -- ^ How many exported items have an example included in the documentation.
   , numWithProperty :: !Int
+  -- ^ How many exported items have a property included in the documentation.
   , numWithWarning :: !Int
+  -- ^ How many exported items have a warning attached to them.
   }
 
 buildModuleInfo :: Maybe CompatGHC.HsDocString -> [Documentation.ExportItem] -> ModuleInfo

@@ -61,11 +61,11 @@ module Pollock.CompatGHC
   , ideclName
   , ideclAs
   , ideclImportList
-  , ImportListInterpretation(Exactly,EverythingBut)
+  , ImportListInterpretation (Exactly, EverythingBut)
   , CollectFlag (CollNoDictBinders)
   , SrcSpanAnn' (SrcSpanAnn, locA)
   , RealSrcSpan
-  , SrcSpan(RealSrcSpan)
+  , SrcSpan (RealSrcSpan)
   , DocDecl (DocCommentNamed, DocGroup)
   , Located
   , HscEnv (hsc_dflags)
@@ -95,8 +95,8 @@ module Pollock.CompatGHC
 
 import qualified Control.Arrow as Arrow
 import qualified Control.Monad as M
-import qualified Data.Maybe as Maybe
 import qualified Data.Map.Strict as Map
+import qualified Data.Maybe as Maybe
 
 import GHC hiding (typeKind)
 import GHC.Plugins hiding (delFV, unitFV)
@@ -143,7 +143,7 @@ import GHC.Types.Avail
   , availsToNameEnv
   , nubAvails
   )
-import GHC.Types.Unique.Map (nonDetEltsUniqMap, nonDetUniqMapToList)
+import GHC.Types.Unique.Map (nonDetUniqMapToList)
 #elif __GLASGOW_HASKELL__ == 906
 import GHC.Types.Avail
   ( AvailInfo
@@ -313,7 +313,7 @@ mapWarningTxtMsg deprecatedFn warnFn warnTxt =
 -- | Simple helper used above but definable consistently across GHC versions.
 lookupOcc :: OccEnv [a] -> OccName -> [a]
 lookupOcc env =
- Maybe.fromMaybe mempty . lookupOccEnv env
+  Maybe.fromMaybe mempty . lookupOccEnv env
 
 nonDetEltUniqMapToMap :: (Ord k) => UniqMap.UniqMap k a -> Map.Map k a
 nonDetEltUniqMapToMap = Map.fromList . nonDetUniqMapToList

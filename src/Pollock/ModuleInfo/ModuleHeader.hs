@@ -12,7 +12,6 @@ module Pollock.ModuleInfo.ModuleHeader
   ) where
 
 import qualified Control.Applicative as App
-import qualified Control.Monad as M
 import qualified Data.Char as Char
 import qualified Data.Maybe as Maybe
 
@@ -22,11 +21,17 @@ import qualified Pollock.CompatGHC as CompatGHC
 -- actually do that? Unclear, but could be useful.
 data ModuleHeader = ModuleHeader
   { description :: !(Maybe String)
+  -- ^ The description field of the Haddock module header.
   , copyright :: !(Maybe String)
+  -- ^ The copyright field of the Haddock module header.
   , license :: !(Maybe String)
+  -- ^ The license field of the Haddock module header.
   , maintainer :: !(Maybe String)
+  -- ^ The maintainer field of the Haddock module header.
   , stability :: !(Maybe String)
+  -- ^ The stability field of the Haddock module header.
   , portability :: !(Maybe String)
+  -- ^ The portability field of the Haddock module header.
   }
 
 emptyHaddockModInfo :: ModuleHeader
@@ -124,18 +129,18 @@ instance Functor P where
 instance Applicative P where
   pure x = P $ \s -> Just (s, x)
   (<*>) m1 m2 =
-      P $ \t0 ->
-    case unP m1 t0 of
-      Nothing -> Nothing
-      Just (t1, z) ->
-        (fmap . fmap) z (unP m2 t1)
+    P $ \t0 ->
+      case unP m1 t0 of
+        Nothing -> Nothing
+        Just (t1, z) ->
+          (fmap . fmap) z (unP m2 t1)
 
 instance Monad P where
   m >>= k =
     P $ \s0 ->
-    case unP m s0 of
-      Nothing -> Nothing
-      Just (s1, x) -> unP (k x) s1
+      case unP m s0 of
+        Nothing -> Nothing
+        Just (s1, x) -> unP (k x) s1
   return = pure
 
 instance App.Alternative P where

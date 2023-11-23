@@ -1,3 +1,7 @@
-roots = [ "Pollock.ProcessModule.processModule","^Paths_.*"]
+roots = [ "Pollock.ProcessModule.processModule"
+        ,"ensureHaddockIsOn"
+	, "Pollock.ModuleInfo"
+	,"^Paths_.*"
+	]
 type-class-roots = false
 unused-types = true

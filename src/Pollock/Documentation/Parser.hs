@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 {- |
 Module: Pollock.Documentation.Parser
 Copyright: (c) Trevis Elser 2023
@@ -67,8 +65,8 @@ processDocStrings strs =
 since :: AttoText.Parser MetaAndDoc
 since = do
   skipHorizontalSpace
-  _ <- AttoText.string "@since "
-  s <- AttoText.sepBy1 AttoText.decimal "."
+  _ <- AttoText.string (T.pack "@since ")
+  s <- AttoText.sepBy1 AttoText.decimal (AttoText.string $ T.pack ".")
   skipHorizontalSpace
   let
     metadata =
@@ -92,9 +90,9 @@ birdtracks :: AttoText.Parser MetaAndDoc
 birdtracks =
   let line = do
         skipHorizontalSpace
-        _ <- AttoText.string ">"
+        _ <- AttoText.string (T.pack ">")
         takeLine
-   in fmap (withEmptyMetadata . DocCodeBlock . docStringFromText . T.intercalate "\n") $
+   in fmap (withEmptyMetadata . DocCodeBlock . docStringFromText . T.intercalate (T.pack "\n")) $
         AttoText.many1 line
 
 paragraph :: AttoText.Parser MetaAndDoc
@@ -114,7 +112,7 @@ docStringFromText = DocString . T.unpack
 textParagraph :: AttoText.Parser Doc
 textParagraph = do
   lines' <- AttoText.many1 takeNonEmptyLine
-  App.pure $ (docStringFromText . T.intercalate "\n") lines'
+  App.pure $ (docStringFromText . T.intercalate (T.pack "\n")) lines'
 
 parseParas :: AttoText.Parser MetaAndDoc
 parseParas =
@@ -131,7 +129,7 @@ Right (DocProperty "hello world")
 property :: AttoText.Parser Doc
 property =
   fmap (DocProperty . T.unpack . T.strip) $ do
-    _ <- AttoText.string "prop>"
+    _ <- AttoText.string (T.pack "prop>")
     takeToEndOfLine
 
 {- |
@@ -140,11 +138,13 @@ for markup.
 -}
 codeblock :: AttoText.Parser Doc
 codeblock = do
-  _ <- AttoText.string "@"
+  let
+    atText = T.pack "@"
+  _ <- AttoText.string atText
   skipHorizontalSpace
   AttoText.endOfLine
   blockDoc <- textParagraph
-  _ <- AttoText.string "@"
+  _ <- AttoText.string atText
   App.pure $ DocCodeBlock blockDoc
 
 takeToEndOfLine :: AttoText.Parser T.Text

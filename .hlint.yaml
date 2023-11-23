@@ -1,10 +1,20 @@
-# Warnings currently triggered
-- ignore: {name: "Use ++"} # 3 hints
-- ignore: {name: "Use camelCase"} # 31 hints
-- ignore: {name: "Use foldr"} # 1 hint
-- ignore: {name: "Use lambda-case"} # 4 hints
-- ignore: {name: "Use record patterns"} # 5 hints
-- ignore: {name: "Use tuple-section"} # 3 hints
+# colorize output and run in parallel
+- arguments: [--color=auto, -j ]
+
+- extensions:
+  - default: false # Disallow extensions, combined with the below we tightly control them overall.
+  - {name: CPP,
+# Centralize CPP for different GHC versions in a single module, Pollock.CompatGHC
+     within: Pollock.CompatGHC
+     }
+  - {name: ScopedTypeVariables,
+# Limit the use of ScopedTypeVariables as well
+     within: Pollock.ProcessModule
+     }
+
+# Don't suggest language extensions
+- ignore: {name: "Use lambda-case"}
+- ignore: {name: "Use tuple-section"}
 
 # Replace a $ b $ c with a . b $ c
 - group: {name: dollar, enabled: true}

@@ -55,9 +55,12 @@ common ci-warnings
     -Wpartial-fields
     -Wcpp-undef
     -Wredundant-constraints
+    -Woperator-whitespace
+    -Winvalid-haddock
     -Wunused-packages
     -Wunused-type-patterns
     -fwrite-ide-info
+    -haddock
   if impl (ghc >= 9.8)
     ghc-options:
       -Wincomplete-export-warnings
@@ -93,7 +96,6 @@ library
                  Pollock.ModuleInfo.ModuleHeader
                  Pollock.ProcessModule
 
-  -- LANGUAGE extensions used by modules in this package.
   other-extensions: CPP
                     ScopedTypeVariables
 

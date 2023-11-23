@@ -1,5 +1,4 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 
 {- |
 Module: Pollock.ProcessModule
@@ -62,7 +61,7 @@ processModule tcGblEnv = do
           decl_warnings
           (fmap fst decls)
           maps
-          (imported_modules tcGblEnv)
+          (importedModules tcGblEnv)
           (fullExplicitExportList tcGblEnv)
           tcgExports
 
@@ -71,8 +70,8 @@ processModule tcGblEnv = do
 -- Module imports of the form `import X`. Note that there is
 -- a) no qualification and
 -- b) no import list
-imported_modules :: CompatGHC.TcGblEnv -> Map.Map CompatGHC.ModuleName [CompatGHC.ModuleName]
-imported_modules tcGblEnv =
+importedModules :: CompatGHC.TcGblEnv -> Map.Map CompatGHC.ModuleName [CompatGHC.ModuleName]
+importedModules tcGblEnv =
   -- If rn_exports aren't available then we know renamed source overall is not available and can
   -- short circuit here.
   case fullExplicitExportList tcGblEnv of
@@ -211,8 +210,8 @@ mkMaps
       thDeclAndInstDocs = thProcessedDeclDocs <> thProcessedInstDocs
       (declDocLists, declArgLists, declLists) = unzip3 $ fmap (nonTHMappings instances) hsdecls
      in
-      ( thDeclAndInstDocs `Map.union` buildDocMap declDocLists
-      , thProcessedArgDocs `unionArgMaps` buildMapWithNotNullValues IM.null declArgLists
+      ( Map.union thDeclAndInstDocs $ buildDocMap declDocLists
+      , unionArgMaps thProcessedArgDocs $ buildMapWithNotNullValues IM.null declArgLists
       , buildMapWithNotNullValues null declLists
       )
 
@@ -242,13 +241,13 @@ nonTHMappings instances (CompatGHC.L (CompatGHC.SrcSpanAnn _ (CompatGHC.RealSrcS
         Maybe.catMaybes subDocs
           <> case processDocStrings hs_docStrs of
             Just doc ->
-              fmap (,doc) names
+              fmap (\x -> (x,doc)) names
             Nothing ->
               mempty
-      argMapping = fmap (,args) names <> subArgs
+      argMapping = fmap (\x -> (x,args)) names <> subArgs
 
       declMapping :: [(CompatGHC.Name, [CompatGHC.HsDecl CompatGHC.GhcRn])]
-      declMapping = fmap (,pure decl) $ names <> subNs
+      declMapping = fmap (\x -> (x,pure decl)) $ names <> subNs
    in (docMapping, argMapping, declMapping)
 nonTHMappings _ _ = mempty
 
@@ -274,14 +273,16 @@ getAssociatedNames ::
   -> Map.Map CompatGHC.RealSrcSpan CompatGHC.Name
   -> [CompatGHC.Name]
 getAssociatedNames _ (CompatGHC.InstD _ d) instanceMap =
-  Maybe.maybeToList (CompatGHC.lookupSrcSpan loc instanceMap) -- See note [2].
- where
-  loc = case d of
-    -- The CoAx's loc is the whole line, but only for TFs. The
-    -- workaround is to dig into the family instance declaration and
-    -- get the identifier with the right location.
-    CompatGHC.TyFamInstD _ (CompatGHC.TyFamInstDecl _ d') -> CompatGHC.getLocA (CompatGHC.feqn_tycon d')
-    _ -> CompatGHC.getInstLoc d
+  let
+    loc =
+      case d of
+        -- The CoAx's loc is the whole line, but only for TFs. The
+        -- workaround is to dig into the family instance declaration and
+        -- get the identifier with the right location.
+        CompatGHC.TyFamInstD _ (CompatGHC.TyFamInstDecl _ d') -> CompatGHC.getLocA (CompatGHC.feqn_tycon d')
+        _ -> CompatGHC.getInstLoc d
+  in
+    Maybe.maybeToList (CompatGHC.lookupSrcSpan loc instanceMap) -- See note [2].
 getAssociatedNames l (CompatGHC.DerivD{}) instanceMap =
   Maybe.maybeToList (Map.lookup l instanceMap) -- See note [2].
 getAssociatedNames _ decl _ =
@@ -375,7 +376,7 @@ mkExportItems semMod warnings hsdecls maps unrestricted_imp_mods exportList allE
   lookupExport ::
     (CompatGHC.IE CompatGHC.GhcRn, [CompatGHC.AvailInfo])
     -> [Documentation.ExportItem]
-  lookupExport (CompatGHC.IEGroup _ _ _, _) =
+  lookupExport (CompatGHC.IEGroup {}, _) =
     mempty
   lookupExport (CompatGHC.IEDoc _ docStr, _) =
     pure . Documentation.mkExportDoc . mkMetaAndDoc $ CompatGHC.unLoc docStr

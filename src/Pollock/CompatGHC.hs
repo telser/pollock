@@ -1,8 +1,7 @@
 {-# LANGUAGE CPP #-}
 
 module Pollock.CompatGHC
-  ( unpackFS
-  , readIORef
+  ( readIORef
   , TcGblEnv
     ( tcg_exports
     , tcg_insts
@@ -21,7 +20,6 @@ module Pollock.CompatGHC
   , emptyOccEnv
   , lookupNameEnv
   , GlobalRdrEnv
-  , sl_fs
   , Warnings
   , WarningTxt
   , declTypeDocs
@@ -63,7 +61,7 @@ module Pollock.CompatGHC
   , ideclImportList
   , ImportListInterpretation (Exactly, EverythingBut)
   , CollectFlag (CollNoDictBinders)
-  , SrcSpanAnn' (SrcSpanAnn, locA)
+  , SrcSpanAnn' (SrcSpanAnn)
   , RealSrcSpan
   , SrcSpan (RealSrcSpan)
   , DocDecl (DocCommentNamed, DocGroup)
@@ -91,6 +89,7 @@ module Pollock.CompatGHC
   -- helpers defined here
   , nonDetEltUniqMapToMap
   , insertEnumSet
+  , stringLiteralToString
   ) where
 
 import qualified Control.Arrow as Arrow
@@ -98,8 +97,54 @@ import qualified Control.Monad as M
 import qualified Data.Map.Strict as Map
 import qualified Data.Maybe as Maybe
 
-import GHC hiding (typeKind)
-import GHC.Plugins hiding (delFV, unitFV)
+import GHC
+  ( CollectFlag (CollNoDictBinders)
+  , DocDecl (DocCommentNamed, DocGroup)
+  , DynFlags (generalFlags)
+  , ExtractedTHDocs (ExtractedTHDocs, ethd_mod_header)
+  , FamEqn (feqn_tycon)
+  , GenLocated (L)
+  , GeneralFlag (Opt_Haddock)
+  , GhcRn
+  , HsDecl (DerivD, DocD, InstD, SigD, ValD)
+  , HsDoc
+  , HsDocString
+  , HscEnv
+  , IE (IEDoc, IEDocNamed, IEGroup, IEModuleContents)
+  , IdP
+  , InstDecl (TyFamInstD)
+  , LHsDecl
+  , Located
+  , Module
+  , ModuleName
+  , Name
+  , NamedThing (getName)
+  , RealSrcSpan
+  , SrcSpan (RealSrcSpan)
+  , SrcSpanAnn' (SrcSpanAnn)
+  , SrcSpanAnnA
+  , TyFamInstDecl (TyFamInstDecl)
+  , WithHsDocIdentifiers (hsDocString)
+  , collectHsBindBinders
+  , getLocA
+  , nameModule
+  , renderHsDocString
+  , unLoc
+  )
+import GHC.Plugins
+  ( GlobalRdrElt
+  , GlobalRdrEnv
+  , HscEnv (hsc_dflags)
+  , OccEnv
+  , OccName
+  , emptyOccEnv
+  , getSrcSpan
+  , lookupNameEnv
+  , lookupOccEnv
+  , lookupSrcSpan
+  , nameIsLocalOrFrom
+  , unpackFS
+  )
 
 import qualified GHC.Data.EnumSet as EnumSet
 import GHC.HsToCore.Docs
@@ -130,9 +175,11 @@ import GHC.Tc.Types
   )
 import GHC.Types.SourceText (StringLiteral, sl_fs)
 import qualified GHC.Types.Unique.Map as UniqMap
-import GHC.Unit.Module.Warnings (WarningTxt (..), Warnings (..))
+import GHC.Unit.Module.Warnings (WarningTxt (DeprecatedTxt, WarningTxt), Warnings (WarnSome))
 
 #if __GLASGOW_HASKELL__ == 908
+import GHC (ImportDecl, ideclImportList, ideclAs, ideclName, ImportListInterpretation (Exactly, EverythingBut))
+import GHC.Plugins (GlobalRdrEltX, greName)
 import GHC.Types.Avail
   ( AvailInfo
   , Avails
@@ -144,7 +191,10 @@ import GHC.Types.Avail
   , nubAvails
   )
 import GHC.Types.Unique.Map (nonDetUniqMapToList)
+
 #elif __GLASGOW_HASKELL__ == 906
+import GHC (ImportDecl, ideclImportList, ideclAs, ideclName,  ImportListInterpretation (Exactly, EverythingBut))
+import GHC.Plugins (greMangledName)
 import GHC.Types.Avail
   ( AvailInfo
   , Avails
@@ -157,7 +207,10 @@ import GHC.Types.Avail
   , nubAvails
   )
 import GHC.Types.Unique.Map (nonDetEltsUniqMap)
+
 #elif __GLASGOW_HASKELL__ == 904
+import GHC (ImportDecl(ideclHiding, ideclAs, ideclName),       XRec)
+import GHC.Plugins (greMangledName)
 import GHC.Types.Avail
   ( AvailInfo
   , Avails
@@ -179,8 +232,6 @@ lookupOccName env = fmap greName . lookupOcc env
 processWarnSome :: Warnings pass -> OccEnv [GlobalRdrElt] -> [Name] -> [(Name, WarningTxt pass)]
 processWarnSome warnings gre names =
   case warnings of
-    WarnAll _ ->
-      mempty
     WarnSome ws exports ->
       let
         keepByName :: [(Name,b)] -> [(Name,b)]
@@ -192,6 +243,9 @@ processWarnSome warnings gre names =
         explodeSnd (as,b) = fmap ((flip (,) b)) as
       in
         keepOnlyKnownNameWarnings ws
+    _ ->
+      -- Note we want to catch all here so we can limit imports that vary for different GHC versions.
+      mempty
 
 -- | Compatability helper to let us get at the deprecated and warning messages consistently
 mapWarningTxtMsg ::
@@ -215,10 +269,6 @@ lookupOccName env = fmap greMangledName . lookupOcc env
 processWarnSome :: Warnings pass -> OccEnv [GlobalRdrElt] -> [Name] -> [(Name, WarningTxt pass)]
 processWarnSome warnings gre names =
   case warnings of
-    NoWarnings ->
-      mempty
-    WarnAll _ ->
-      mempty
     WarnSome ws ->
       let
         keepByName :: [(Name,b)] -> [(Name,b)]
@@ -231,6 +281,10 @@ processWarnSome warnings gre names =
         explodeSnd (as,b) = fmap ((flip (,) b)) as
       in
         keepOnlyKnownNameWarnings ws
+    _ ->
+      -- Note we want to catch all here so we can limit imports that vary for different GHC versions.
+      mempty
+
 -- | Shim for using the GHC 9.8 api, note the previous name was somewhat confusing as it does result
 -- in a list not a map!
 nonDetUniqMapToList :: UniqMap.UniqMap k a -> [(k, a)]
@@ -275,10 +329,6 @@ lookupOccName env = fmap greMangledName . lookupOcc env
 processWarnSome :: Warnings pass -> OccEnv [GlobalRdrElt] -> [Name] -> [(Name, WarningTxt pass)]
 processWarnSome warnings gre names =
   case warnings of
-    NoWarnings ->
-      mempty
-    WarnAll _ ->
-      mempty
     WarnSome ws ->
       let
         keepByName :: [(Name,b)] -> [(Name,b)]
@@ -291,6 +341,9 @@ processWarnSome warnings gre names =
         explodeSnd (as,b) = fmap ((flip (,) b)) as
       in
         keepOnlyKnownNameWarnings ws
+    _ ->
+      -- Note we want to catch all here so we can limit imports that vary for different GHC versions.
+      mempty
 
 -- | Shim for using the GHC 9.8 api, note the previous name was somewhat confusing as it does result
 -- in a list not a map!
@@ -315,9 +368,13 @@ lookupOcc :: OccEnv [a] -> OccName -> [a]
 lookupOcc env =
   Maybe.fromMaybe mempty . lookupOccEnv env
 
+-- | Helper to convert from UniqMap to Map in a consistent fashion.
 nonDetEltUniqMapToMap :: (Ord k) => UniqMap.UniqMap k a -> Map.Map k a
 nonDetEltUniqMapToMap = Map.fromList . nonDetUniqMapToList
 
 -- | A Helper to keep the interface clean avoiding any potential conflicts with 'insert'.
 insertEnumSet :: (Enum a) => a -> EnumSet.EnumSet a -> EnumSet.EnumSet a
 insertEnumSet = EnumSet.insert
+
+stringLiteralToString :: StringLiteral -> String
+stringLiteralToString = unpackFS . sl_fs

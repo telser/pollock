@@ -47,7 +47,7 @@ common ci-warnings
     -Wall
     -Wcompat
     -Werror
-    -Wno-missing-import-lists
+    -Wmissing-import-lists
     -Wmissing-home-modules
     -Wmissed-specialisations
     -Wmonomorphism-restriction

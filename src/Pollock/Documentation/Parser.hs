@@ -32,7 +32,11 @@ import Pollock.Documentation.Doc
       )
   )
 import Pollock.Documentation.Metadata (Metadata (Metadata, version))
-import Pollock.Documentation.MetadataAndDoc (MetaAndDoc (..), metaAndDocConcat, withEmptyMetadata)
+import Pollock.Documentation.MetadataAndDoc
+  ( MetaAndDoc (MetaAndDoc, doc, meta)
+  , metaAndDocConcat
+  , withEmptyMetadata
+  )
 
 parseText :: T.Text -> Doc
 parseText =

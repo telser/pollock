@@ -156,7 +156,7 @@ parseWarning w =
       t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
       -> String
     foldMsgs =
-      foldMap (CompatGHC.unpackFS . CompatGHC.sl_fs . CompatGHC.hsDocString . CompatGHC.unLoc)
+      foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
 
     formatDeprecated ::
       (Foldable t) =>

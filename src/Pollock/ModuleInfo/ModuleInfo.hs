@@ -15,10 +15,10 @@ import qualified Data.Maybe as Maybe
 
 import qualified Pollock.CompatGHC as CompatGHC
 import qualified Pollock.Documentation as Documentation
-import Pollock.ModuleInfo.ModuleHeader
+import qualified Pollock.ModuleInfo.ModuleHeader as ModuleHeader
 
 data ModuleInfo = ModuleInfo
-  { moduleHeader :: !ModuleHeader
+  { moduleHeader :: !ModuleHeader.ModuleHeader
   -- ^ The haddock module header
   , haddockableExports :: !Int
   -- ^ How many exported items that could have documentation attached.
@@ -41,7 +41,7 @@ buildModuleInfo str =
   let
     initialModuleInfo =
       ModuleInfo
-        { moduleHeader = processModuleHeader str
+        { moduleHeader = ModuleHeader.processModuleHeader str
         , haddockableExports = 0
         , haddockedExports = 0
         , numWithSince = 0

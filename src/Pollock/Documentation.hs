@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-missing-import-lists #-}
+
 {- |
 Module: Pollock.Documentation
 Copyright: (c) Trevis Elser 2023

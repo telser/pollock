@@ -14,5 +14,26 @@ module Pollock
   ) where
 
 import Pollock.DriverPlugin (ensureHaddockIsOn)
-import Pollock.ModuleInfo (ModuleHeader (..), ModuleInfo (..))
+import Pollock.ModuleInfo
+  ( ModuleHeader
+      ( ModuleHeader
+      , copyright
+      , description
+      , license
+      , maintainer
+      , portability
+      , stability
+      )
+  , ModuleInfo
+    ( ModuleInfo
+    , haddockableExports
+    , haddockedExports
+    , moduleHeader
+    , numWithCodeBlock
+    , numWithExample
+    , numWithProperty
+    , numWithSince
+    , numWithWarning
+    )
+  )
 import Pollock.ProcessModule (processModule)

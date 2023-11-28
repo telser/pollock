@@ -241,13 +241,13 @@ nonTHMappings instances (CompatGHC.L (CompatGHC.SrcSpanAnn _ (CompatGHC.RealSrcS
         Maybe.catMaybes subDocs
           <> case processDocStrings hs_docStrs of
             Just doc ->
-              fmap (\x -> (x,doc)) names
+              fmap (\x -> (x, doc)) names
             Nothing ->
               mempty
-      argMapping = fmap (\x -> (x,args)) names <> subArgs
+      argMapping = fmap (\x -> (x, args)) names <> subArgs
 
       declMapping :: [(CompatGHC.Name, [CompatGHC.HsDecl CompatGHC.GhcRn])]
-      declMapping = fmap (\x -> (x,pure decl)) $ names <> subNs
+      declMapping = fmap (\x -> (x, pure decl)) $ names <> subNs
    in (docMapping, argMapping, declMapping)
 nonTHMappings _ _ = mempty
 
@@ -281,7 +281,7 @@ getAssociatedNames _ (CompatGHC.InstD _ d) instanceMap =
         -- get the identifier with the right location.
         CompatGHC.TyFamInstD _ (CompatGHC.TyFamInstDecl _ d') -> CompatGHC.getLocA (CompatGHC.feqn_tycon d')
         _ -> CompatGHC.getInstLoc d
-  in
+   in
     Maybe.maybeToList (CompatGHC.lookupSrcSpan loc instanceMap) -- See note [2].
 getAssociatedNames l (CompatGHC.DerivD{}) instanceMap =
   Maybe.maybeToList (Map.lookup l instanceMap) -- See note [2].
@@ -376,7 +376,7 @@ mkExportItems semMod warnings hsdecls maps unrestricted_imp_mods exportList allE
   lookupExport ::
     (CompatGHC.IE CompatGHC.GhcRn, [CompatGHC.AvailInfo])
     -> [Documentation.ExportItem]
-  lookupExport (CompatGHC.IEGroup {}, _) =
+  lookupExport (CompatGHC.IEGroup{}, _) =
     mempty
   lookupExport (CompatGHC.IEDoc _ docStr, _) =
     pure . Documentation.mkExportDoc . mkMetaAndDoc $ CompatGHC.unLoc docStr

@@ -22,6 +22,7 @@ setup-ghc:
 
 .PHONY: setup-cabal
 setup-cabal:
+	ghcup install cabal
 	cabal update
 # This will build all the dependencies for the various ghc versions
 .for GHC_VERSION in ${GHC_VERSIONS}
@@ -30,6 +31,7 @@ setup-cabal:
 
 .PHONY: setup-stack
 setup-stack:
+	ghcup install stack
 	stack build --only-dependencies --flag pollock:ci
 
 .PHONY: setup-extra-tools

@@ -62,4 +62,4 @@ format:
 
 .PHONY: format-check
 format-check:
-	stack exec fourmolu -- -m check app plugin src
+	stack exec fourmolu -- -m check src

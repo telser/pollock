@@ -50,7 +50,7 @@ processModule tcGblEnv = do
   -- Process the top-level module header documentation.
   let mbHeaderStr =
         fmap CompatGHC.hsDocString (CompatGHC.ethd_mod_header thDocs)
-          Applicative.<|> (CompatGHC.hsDocString . CompatGHC.unLoc <$> CompatGHC.tcg_doc_hdr tcGblEnv)
+          Applicative.<|> CompatGHC.getHeaderInfo tcGblEnv
 
       decls = maybe mempty CompatGHC.topDecls $ CompatGHC.tcg_rn_decls tcGblEnv
       maps = mkMaps localInstances decls thDocs
@@ -150,24 +150,12 @@ parseWarning w =
         . Documentation.parseText
         . T.pack
 
-    foldMsgs ::
-      (Foldable t) =>
-      t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
-      -> String
     foldMsgs =
       foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
 
-    formatDeprecated ::
-      (Foldable t) =>
-      t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
-      -> Documentation.Doc
     formatDeprecated =
       format "Deprecated: " . foldMsgs
 
-    formatWarning ::
-      (Foldable t) =>
-      t (CompatGHC.Located (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass))
-      -> Documentation.Doc
     formatWarning =
       format "Warning: " . foldMsgs
    in
@@ -222,7 +210,7 @@ nonTHMappings ::
      , [(CompatGHC.Name, IM.IntMap Documentation.MetaAndDoc)]
      , [(CompatGHC.Name, [CompatGHC.HsDecl CompatGHC.GhcRn])]
      )
-nonTHMappings instances (CompatGHC.L (CompatGHC.SrcSpanAnn _ (CompatGHC.RealSrcSpan l _)) decl, hs_docStrs) =
+nonTHMappings instances (CompatGHC.L _ decl, hs_docStrs) =
   let args :: IM.IntMap Documentation.MetaAndDoc
       args =
         fmap mkMetaAndDoc (CompatGHC.declTypeDocs decl)
@@ -235,7 +223,7 @@ nonTHMappings instances (CompatGHC.L (CompatGHC.SrcSpanAnn _ (CompatGHC.RealSrcS
         unzip3 . fmap processSubordinates $
           CompatGHC.subordinates CompatGHC.emptyOccEnv instanceMap decl
 
-      names = getAssociatedNames l decl instanceMap
+      names = getAssociatedNames decl instanceMap
 
       docMapping =
         Maybe.catMaybes subDocs
@@ -249,7 +237,6 @@ nonTHMappings instances (CompatGHC.L (CompatGHC.SrcSpanAnn _ (CompatGHC.RealSrcS
       declMapping :: [(CompatGHC.Name, [CompatGHC.HsDecl CompatGHC.GhcRn])]
       declMapping = fmap (\x -> (x, pure decl)) $ names <> subNs
    in (docMapping, argMapping, declMapping)
-nonTHMappings _ _ = mempty
 
 processSubordinates ::
   (a, [CompatGHC.HsDoc CompatGHC.GhcRn], IM.IntMap (CompatGHC.HsDoc CompatGHC.GhcRn))
@@ -268,11 +255,10 @@ instanceFoldFn n accum =
     _ -> accum
 
 getAssociatedNames ::
-  CompatGHC.RealSrcSpan
-  -> CompatGHC.HsDecl CompatGHC.GhcRn
+  CompatGHC.HsDecl CompatGHC.GhcRn
   -> Map.Map CompatGHC.RealSrcSpan CompatGHC.Name
   -> [CompatGHC.Name]
-getAssociatedNames _ (CompatGHC.InstD _ d) instanceMap =
+getAssociatedNames (CompatGHC.InstD _ d) instanceMap =
   let
     loc =
       case d of
@@ -283,9 +269,7 @@ getAssociatedNames _ (CompatGHC.InstD _ d) instanceMap =
         _ -> CompatGHC.getInstLoc d
    in
     Maybe.maybeToList (CompatGHC.lookupSrcSpan loc instanceMap) -- See note [2].
-getAssociatedNames l (CompatGHC.DerivD{}) instanceMap =
-  Maybe.maybeToList (Map.lookup l instanceMap) -- See note [2].
-getAssociatedNames _ decl _ =
+getAssociatedNames decl _ =
   CompatGHC.getMainDeclBinder CompatGHC.emptyOccEnv decl
 
 {- | Unions together two 'ArgDocMaps' (or ArgMaps in haddock-api), such that two

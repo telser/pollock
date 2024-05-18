@@ -97,8 +97,8 @@ import qualified Control.Monad as M
 import qualified Data.Map.Strict as Map
 import qualified Data.Maybe as Maybe
 import qualified GHC.Data.EnumSet as EnumSet
-import qualified GHC.Types.Unique.Map as UniqMap
 import qualified GHC.Tc.Types as TcTypes
+import qualified GHC.Types.Unique.Map as UniqMap
 
 import GHC
   ( CollectFlag (CollNoDictBinders)
@@ -393,7 +393,7 @@ processWarnSome warnings gre names =
     WarnSome ws ->
       let
         keepByName :: [(Name,b)] -> [(Name,b)]
-        keepByName = filter (\x -> (fst x) `elem` names)
+        keepByName = filter (\x -> fst x `elem` names)
 
         keepOnlyKnownNameWarnings :: [(OccName, b)] -> [(Name, b)]
         keepOnlyKnownNameWarnings = keepByName . M.join . fmap (explodeSnd . Arrow.first (lookupOccName gre))

@@ -20,7 +20,7 @@ name:            pollock
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:         0.2.0.0
+version:         0.1.0.1
 
 synopsis: Functionality to help examine Haddock information of a module.
 description: Pollock is functionality to examine various bits of information about documentation as exposed from a Haskell module. This is designed to be used as part of a GHC plugin.
@@ -31,7 +31,7 @@ maintainer:      trevis@flipstone.com
 copyright:       (c) 2023-2024 Trevis Elser
 category:        Development, documentation, library
 build-type:      Simple
-tested-with:     GHC == 9.4.7, GHC == 9.6.3, GHC == 9.8.1, GHC == 9.10.1
+tested-with:     GHC == 9.4.8, GHC == 9.6.5, GHC == 9.8.2, GHC == 9.10.1
 
 -- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
 extra-doc-files: CHANGELOG.md
@@ -64,7 +64,15 @@ common ci-warnings
   if impl (ghc >= 9.8)
     ghc-options:
       -Wincomplete-export-warnings
+      -Wimplicit-rhs-quantification
       -Wterm-variable-capture
+      -Winconsistent-flags
+  if impl (ghc >= 9.10)
+    ghc-options:
+      -Wdeprecated-type-abstractions
+      -Wbadly-staged-types
+      -Wdata-kinds-tc
+      -Wdefaulted-exception-context
 
 flag ci
   description:
@@ -102,7 +110,7 @@ library
   build-depends: attoparsec  >=0.14.4   && <0.15
                , base        >=4.17.1.0 && <5
                , containers  >=0.6      && < 0.8
-               , ghc         >=9.4      && <9.9
+               , ghc         >=9.4      && <9.11
                , text        >=2.0      && <2.2
 
   hs-source-dirs:   src

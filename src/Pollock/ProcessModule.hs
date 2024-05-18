@@ -108,12 +108,7 @@ unrestrictedModuleImports idecls =
     -> [(CompatGHC.ModuleName, [CompatGHC.ImportDecl CompatGHC.GhcRn])]
   moduleMapping idecl =
     pure (CompatGHC.unLoc (CompatGHC.ideclName idecl), pure idecl)
-      <> ( case CompatGHC.ideclAs idecl of
-            Just modName ->
-              pure (CompatGHC.unLoc modName, pure idecl)
-            _ ->
-              mempty
-         )
+      <> maybe mempty (\modName -> pure (CompatGHC.unLoc modName, pure idecl)) (CompatGHC.ideclAs idecl)
 
   isInteresting :: CompatGHC.ImportDecl CompatGHC.GhcRn -> Bool
   isInteresting idecl =
@@ -150,14 +145,23 @@ parseWarning w =
         . Documentation.parseText
         . T.pack
 
-    foldMsgs =
-      foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
-
+    formatDeprecated ::
+      [ CompatGHC.GenLocated
+          l
+          (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass)
+      ]
+      -> Documentation.Doc
     formatDeprecated =
-      format "Deprecated: " . foldMsgs
+      format "Deprecated: " . foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
 
+    formatWarning ::
+      [ CompatGHC.GenLocated
+          l
+          (CompatGHC.WithHsDocIdentifiers CompatGHC.StringLiteral pass)
+      ]
+      -> Documentation.Doc
     formatWarning =
-      format "Warning: " . foldMsgs
+      format "Warning: " . foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
    in
     CompatGHC.mapWarningTxtMsg formatDeprecated formatWarning w
 

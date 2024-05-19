@@ -1,6 +1,6 @@
 # Revision history for pollock
 
-## 0.1.0.1 -- YYYY-mm-dd
+## 0.1.0.1 -- 2024-05-19
 
 * Internal changes to support GHC 9.10
 

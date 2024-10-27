@@ -175,7 +175,7 @@ import GHC.Tc.Types
 import GHC.Types.SourceText (StringLiteral, sl_fs)
 import GHC.Unit.Module.Warnings (WarningTxt (DeprecatedTxt, WarningTxt), Warnings (WarnSome))
 
-#if __GLASGOW_HASKELL__ == 910
+#if __GLASGOW_HASKELL__ >= 910
 import GHC (ImportDecl, ideclImportList, ideclAs, ideclName, ImportListInterpretation (Exactly, EverythingBut))
 import GHC.Plugins (GlobalRdrEltX, greName)
 import qualified GHC.Parser.Annotation as Annotation
@@ -237,7 +237,7 @@ import GHC.Types.Avail
   )
 #endif
 
-#if __GLASGOW_HASKELL__ == 910
+#if __GLASGOW_HASKELL__ >= 910
 -- | Compatibility helper to ease development against multiple version
 getHeaderInfo :: TcGblEnv -> Maybe HsDocString
 getHeaderInfo = fmap (hsDocString . unLoc) . fst . TcTypes.tcg_hdr_info

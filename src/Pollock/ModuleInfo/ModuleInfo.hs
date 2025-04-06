@@ -84,7 +84,6 @@ foldExportItemInfo exportItem moduleInfo =
               else numWithWarning moduleInfo
         }
     else -- With no docs we _only_ had an export, but nothing else.
-
       moduleInfo
         { haddockableExports =
             haddockableExports moduleInfo + 1

@@ -152,7 +152,8 @@ parseWarning w =
       ]
       -> Documentation.Doc
     formatDeprecated =
-      format "Deprecated: " . foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
+      format "Deprecated: "
+        . foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
 
     formatWarning ::
       [ CompatGHC.GenLocated
@@ -161,7 +162,8 @@ parseWarning w =
       ]
       -> Documentation.Doc
     formatWarning =
-      format "Warning: " . foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
+      format "Warning: "
+        . foldMap (CompatGHC.stringLiteralToString . CompatGHC.hsDocString . CompatGHC.unLoc)
    in
     CompatGHC.mapWarningTxtMsg formatDeprecated formatWarning w
 

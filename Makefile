@@ -10,19 +10,19 @@ setup: setup-ghc setup-cabal setup-stack setup-extra-tools
 # run a subset of them on different platforms. This is particularly helpful when something is
 # unreleased and/or broken upstream. Like not having a proper release for aarch64-darwin or
 # something.
-GHC_VERSIONS ?= 9.4.8 9.6.6 9.8.4 9.10.1 9.12.2
+GHC_VERSIONS ?= 9.4.8 9.6.7 9.8.4 9.10.3 9.12.2 9.14.1
 STACK_YAMLS ?= stack.yaml
 
 .PHONY: setup-ghc
 setup-ghc:
 # This will prefetch/build the required versions of ghc upfront
 .for GHC_VERSION in ${GHC_VERSIONS}
-	ghcup install ghc ${GHC_VERSION}
+	command -v ghc-${GHC_VERSION} || ghcup install ghc ${GHC_VERSION}
 .endfor
 
 .PHONY: setup-cabal
 setup-cabal:
-	ghcup install cabal
+	command -v cabal || ghcup install cabal
 	cabal update
 # This will build all the dependencies for the various ghc versions
 .for GHC_VERSION in ${GHC_VERSIONS}
@@ -31,7 +31,7 @@ setup-cabal:
 
 .PHONY: setup-stack
 setup-stack:
-	ghcup install stack
+	comand -v stack || ghcup install stack
 	stack build --only-dependencies --flag pollock:ci
 
 .PHONY: setup-extra-tools

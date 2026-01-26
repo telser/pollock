@@ -20,7 +20,7 @@ name:            pollock
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:         0.1.0.3
+version:            0.1.0.4
 
 synopsis: Functionality to help examine Haddock information of a module.
 description: Pollock is functionality to examine various bits of information about documentation as exposed from a Haskell module. This is designed to be used as part of a GHC plugin.
@@ -31,7 +31,7 @@ maintainer:      trevis@flipstone.com
 copyright:       (c) 2023-2025 Trevis Elser
 category:        Development, documentation, library
 build-type:      Simple
-tested-with:     GHC == 9.4.8, GHC == 9.6.6, GHC == 9.8.4, GHC == 9.10.1, GHC == 9.12.2
+tested-with:     GHC == 9.4.8, GHC == 9.6.7, GHC == 9.8.4, GHC == 9.10.3, GHC == 9.12.2, GHC == 9.14.1
 extra-doc-files:
   CHANGELOG.md
 
@@ -72,14 +72,19 @@ common ci-warnings
       -Winconsistent-flags
   if impl (ghc >= 9.10)
     ghc-options:
-      -Wdeprecated-type-abstractions
-      -Wbadly-staged-types
-      -Wdata-kinds-tc
       -Wdefaulted-exception-context
       -- The following is tempoarily disabled -Wincomplete-record-selectors
+  if impl (ghc >= 9.10) && impl (ghc < 9.14)
+    ghc-options:
+      -Wbadly-staged-types
+      -Wdeprecated-type-abstractions
+      -Wdata-kinds-tc
   if impl (ghc >= 9.12)
     ghc-options:
       -Wview-pattern-signatures
+  if impl (ghc >= 9.14)
+    ghc-options:
+      -Wbadly-levelled-types
 
 flag ci
   description:
@@ -117,7 +122,7 @@ library
   build-depends: attoparsec  >=0.14.4   && <0.15
                , base        >=4.17.1.0 && <5
                , containers  >=0.6      && < 0.9
-               , ghc         >=9.4      && <9.13
+               , ghc         >=9.4      && <9.15
                , text        >=2.0      && <2.2
 
   hs-source-dirs:   src

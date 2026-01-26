@@ -251,12 +251,12 @@ processWarnSome warnings gre names =
     WarnSome ws exports ->
       let
         keepByName :: [(Name,b)] -> [(Name,b)]
-        keepByName = filter (\x -> (fst x) `elem` names)
+        keepByName = filter (\x -> fst x `elem` names)
 
         keepOnlyKnownNameWarnings = keepByName . mappend exports . M.join . fmap (explodeSnd . Arrow.first (lookupOccName gre))
 
         explodeSnd :: Functor f => (f a, b) -> f (a, b)
-        explodeSnd (as,b) = fmap ((flip (,) b)) as
+        explodeSnd (as,b) = fmap (flip (,) b) as
       in
         keepOnlyKnownNameWarnings ws
     _ ->

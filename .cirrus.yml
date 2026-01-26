@@ -1,6 +1,6 @@
 linux_test_task:
   container:
-    image: ghcr.io/flipstone/haskell-tools:debian-stable-ghc-9.6.6-2024-10-23-eb5da39
+    image: ghcr.io/flipstone/haskell-tools:debian-ghc-9.10.3-1e1d10c
     cpu: 6
     memory: 6G
   linux_stack_cache:
@@ -45,7 +45,7 @@ linux_test_task:
 
 freebsd_test_task:
   freebsd_instance:
-    image_family: freebsd-14-1
+    image_family: freebsd-15-0-amd64-zfs
     cpu: 6
     memory: 6G
   freebsd_stack_cache:
@@ -62,34 +62,34 @@ freebsd_test_task:
       - cat Makefile
     populate_script:
       - pkg install -y hs-stack hs-cabal-install curl
-      - curl -o /usr/local/bin/ghcup https://downloads.haskell.org/\~ghcup/0.1.30.0/x86_64-portbld-freebsd-ghcup-0.1.30.0
+      - curl -o /usr/local/bin/ghcup https://downloads.haskell.org/\~ghcup/0.1.50.2/x86_64-portbld-freebsd-ghcup-0.1.50.2
       - chmod +x /usr/local/bin/ghcup
       - export PATH=$PATH:/.local/bin:/.ghcup/bin
-      - export GHC_VERSIONS=9.4.8
+      - export GHC_VERSIONS=9.12.2
       - export STACK_YAMLS=
-      - make setup-cabal
+      - make setup-ghc setup-cabal
   upload_caches:
     - freebsd_ghcup
   install_script:
     - pkg install -y hs-stack hs-cabal-install curl
-    - curl -o /usr/local/bin/ghcup https://downloads.haskell.org/\~ghcup/0.1.30.0/x86_64-portbld-freebsd-ghcup-0.1.30.0
+    - curl -o /usr/local/bin/ghcup https://downloads.haskell.org/\~ghcup/0.1.50.2/x86_64-portbld-freebsd-ghcup-0.1.50.2
     - chmod +x /usr/local/bin/ghcup
     - export PATH=$PATH:/.local/bin:/.ghcup/bin
-    - export GHC_VERSIONS=9.4.8
+    - export GHC_VERSIONS=9.12.2
     - export STACK_YAMLS=
     - make setup-cabal
   test_script:
     - export PATH=$PATH:/.local/bin:/.ghcup/bin
-    - export GHC_VERSIONS=9.4.8
+    - export GHC_VERSIONS=9.12.2
     - export STACK_YAMLS=
     # no reason to test everything, like formatting, on every platform
-    - make test-cabal
+    - make build-cabal
   upload_caches:
     - freebsd_cabal
 
 macos_test_task:
   macos_instance:
-    image: ghcr.io/cirruslabs/macos-ventura-base:latest
+    image: ghcr.io/cirruslabs/macos-runner:tahoe
     cpu: 6
     memory: 6G
   macos_stack_cache:
@@ -121,7 +121,7 @@ macos_test_task:
     - source /Users/admin/.ghcup/env
     - export PATH=$PATH:/Users/admin/.local/bin
     # no reason to test everything, like formatting, on every platform
-    - GHC_VERSIONS=9.4.8 STACK_YAMLS=stack.yaml bmake test-cabal test-stack
+    - GHC_VERSIONS=9.4.8 STACK_YAMLS=stack.yaml bmake build-cabal build-stack
   upload_caches:
     - macos_stack
     - macos_cabal

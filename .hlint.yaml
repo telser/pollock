@@ -27,3 +27,5 @@
 
 - ignore: {name: "Use infix"}
 - ignore: {name: "Use <$>"}
+- ignore: {name: "Use fewer imports"} #This suggests combining imports that are across CPP :(
+- ignore: {name: "Use =<<"}

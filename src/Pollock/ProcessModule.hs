@@ -361,7 +361,7 @@ mkExportItems semMod warnings hsdecls maps unrestricted_imp_mods exportList allE
         hsdecls
         maps
         allExports
-    Just exports -> concat $ traverse lookupExport exports
+    Just exports -> concatMap lookupExport exports
  where
   lookupExport ::
     (CompatGHC.IE CompatGHC.GhcRn, [CompatGHC.AvailInfo])

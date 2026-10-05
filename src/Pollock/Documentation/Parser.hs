@@ -23,7 +23,6 @@ import qualified Pollock.CompatGHC as CompatGHC
 import Pollock.Documentation.Doc
   ( Doc
       ( DocCodeBlock
-      , DocEmpty
       , DocParagraph
       , DocProperty
       , DocString
@@ -59,7 +58,7 @@ processDocStrings strs =
     -- We check that we don't have any version info to render instead
     -- of just checking if there is no comment: there may not be a
     -- comment but we still want to pass through any meta data.
-    MetaAndDoc{meta = Metadata Nothing, doc = DocEmpty} -> Nothing
+    MetaAndDoc{meta = Metadata Nothing, doc = Nothing} -> Nothing
     x -> Just x
 
 since :: AttoText.Parser MetaAndDoc
@@ -73,7 +72,7 @@ since = do
       Metadata
         { version = Just s
         }
-  pure $ MetaAndDoc metadata DocEmpty
+  pure $ MetaAndDoc metadata Nothing
 
 skipHorizontalSpace :: AttoText.Parser ()
 skipHorizontalSpace =

@@ -82,8 +82,7 @@ hasDoc
   ( Documentation.ExportItemDecl
       (Documentation.ExportDecl (Documentation.DocumentationForDecl d _ _))
     ) =
-    case fmap Documentation.doc d of
+    case d >>= Documentation.doc of
       Nothing -> False
-      Just Documentation.DocEmpty -> False
       Just _ -> True
 hasDoc _ = True

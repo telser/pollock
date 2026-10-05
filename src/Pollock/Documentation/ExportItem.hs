@@ -52,32 +52,32 @@ exportItemHasSinceVersion (ExportItemDecl decl) =
 
 exportItemHasWarning :: ExportItem -> Bool
 exportItemHasWarning (ExportItemDoc md) =
-  docHasWarning $ doc md
+  maybe False docHasWarning $ doc md
 exportItemHasWarning (ExportItemDecl decl) =
   case documentationDoc $ expItemMbDoc decl of
     Nothing -> False
-    Just md -> docHasWarning $ doc md
+    Just md -> maybe False docHasWarning $ doc md
 
 exportItemHasProperty :: ExportItem -> Bool
 exportItemHasProperty (ExportItemDoc md) =
-  docHasProperty $ doc md
+  maybe False docHasProperty $ doc md
 exportItemHasProperty (ExportItemDecl decl) =
   case documentationDoc $ expItemMbDoc decl of
     Nothing -> False
-    Just md -> docHasProperty $ doc md
+    Just md -> maybe False docHasProperty $ doc md
 
 exportItemHasExample :: ExportItem -> Bool
 exportItemHasExample (ExportItemDoc md) =
-  docHasExamples $ doc md
+  maybe False docHasExamples $ doc md
 exportItemHasExample (ExportItemDecl decl) =
   case documentationDoc $ expItemMbDoc decl of
     Nothing -> False
-    Just md -> docHasExamples $ doc md
+    Just md -> maybe False docHasExamples $ doc md
 
 exportItemHasCodeBlock :: ExportItem -> Bool
 exportItemHasCodeBlock (ExportItemDoc md) =
-  docHasCodeBlock $ doc md
+  maybe False docHasCodeBlock $ doc md
 exportItemHasCodeBlock (ExportItemDecl decl) =
   case documentationDoc $ expItemMbDoc decl of
     Nothing -> False
-    Just md -> docHasCodeBlock $ doc md
+    Just md -> maybe False docHasCodeBlock $ doc md

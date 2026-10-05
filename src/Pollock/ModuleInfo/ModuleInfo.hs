@@ -11,7 +11,6 @@ module Pollock.ModuleInfo.ModuleInfo
   , buildModuleInfo
   ) where
 
-import qualified Data.Maybe as Maybe
 
 import qualified Pollock.CompatGHC as CompatGHC
 import qualified Pollock.Documentation as Documentation
@@ -55,43 +54,35 @@ buildModuleInfo str =
 
 foldExportItemInfo :: Documentation.ExportItem -> ModuleInfo -> ModuleInfo
 foldExportItemInfo exportItem moduleInfo =
-  if hasDoc exportItem
-    then
-      moduleInfo
-        { haddockableExports =
-            haddockableExports moduleInfo + 1
-        , haddockedExports =
-            haddockedExports moduleInfo + 1
-        , numWithSince =
-            if Documentation.exportItemHasSinceVersion exportItem
-              then numWithSince moduleInfo + 1
-              else numWithSince moduleInfo
-        , numWithCodeBlock =
-            if Documentation.exportItemHasCodeBlock exportItem
-              then numWithCodeBlock moduleInfo + 1
-              else numWithCodeBlock moduleInfo
-        , numWithExample =
-            if Documentation.exportItemHasExample exportItem
-              then numWithExample moduleInfo + 1
-              else numWithExample moduleInfo
-        , numWithProperty =
-            if Documentation.exportItemHasProperty exportItem
-              then numWithProperty moduleInfo + 1
-              else numWithProperty moduleInfo
-        , numWithWarning =
-            if Documentation.exportItemHasWarning exportItem
-              then numWithWarning moduleInfo + 1
-              else numWithWarning moduleInfo
-        }
-    else -- With no docs we _only_ had an export, but nothing else.
-      moduleInfo
-        { haddockableExports =
-            haddockableExports moduleInfo + 1
-        }
+  let
+    bump predicate field =
+      if predicate exportItem
+        then field moduleInfo + 1
+        else field moduleInfo
+   in
+    moduleInfo
+      { haddockableExports =
+          haddockableExports moduleInfo + 1
+      , haddockedExports =
+          bump hasDoc haddockedExports
+      , numWithSince =
+          bump Documentation.exportItemHasSinceVersion numWithSince
+      , numWithCodeBlock =
+          bump Documentation.exportItemHasCodeBlock numWithCodeBlock
+      , numWithExample =
+          bump Documentation.exportItemHasExample numWithExample
+      , numWithProperty =
+          bump Documentation.exportItemHasProperty numWithProperty
+      , numWithWarning =
+          bump Documentation.exportItemHasWarning numWithWarning
+      }
 
 hasDoc :: Documentation.ExportItem -> Bool
 hasDoc
   ( Documentation.ExportItemDecl
       (Documentation.ExportDecl (Documentation.DocumentationForDecl d _ _))
-    ) = Maybe.isJust d
+    ) =
+    case d >>= Documentation.doc of
+      Nothing -> False
+      Just _ -> True
 hasDoc _ = True

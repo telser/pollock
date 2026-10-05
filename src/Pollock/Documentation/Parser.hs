@@ -115,8 +115,9 @@ textParagraph = do
   App.pure $ (docStringFromText . T.intercalate (T.pack "\n")) lines'
 
 parseParas :: AttoText.Parser MetaAndDoc
-parseParas =
-  fmap metaAndDocConcat . AttoText.many' $ do
+parseParas = fmap metaAndDocConcat $ do
+  consumeEmptyLines
+  AttoText.many' $ do
     p <- paragraph
     consumeEmptyLines
     App.pure p
